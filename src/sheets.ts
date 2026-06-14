@@ -47,7 +47,34 @@ export const SHEET_HEADERS = [
   "Comments",
   "Virality Score",
   "Published At",
+  "Category",
 ];
+
+// ─── Category tagging (keyword + source based, no LLM needed) ────────────────
+
+const CRYPTO_SOURCES = new Set([
+  "coindesk", "cointelegraph", "decrypt", "theblock", "blockworks",
+  "bitcoinmagazine", "messari", "cryptoslate", "cryptobriefing",
+  "beincrypto", "bankless", "cryptonews", "dlnews", "wublockchain",
+  "coingeckonews", "rwaxyz",
+]);
+
+const CRYPTO_SUBREDDITS = new Set([
+  "CryptoCurrency", "ethereum", "bitcoin", "defi", "web3", "solana",
+]);
+
+const AI_KEYWORDS = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neural|transformer|diffusion|agent|model|inference|RAG|fine.?tun|embedding)\b/i;
+const CRYPTO_KEYWORDS = /\b(crypto|bitcoin|ethereum|blockchain|DeFi|NFT|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|RWA|DAO|L2|layer 2|memecoin)\b/i;
+
+function categorizePost(post: TrendPost): "AI" | "Crypto" | "Other" {
+  if (CRYPTO_SOURCES.has(post.source)) return "Crypto";
+  if (post.subreddit && CRYPTO_SUBREDDITS.has(post.subreddit)) return "Crypto";
+  if (post.source === "huggingface") return "AI";
+  const text = `${post.title} ${post.description ?? ""}`;
+  if (CRYPTO_KEYWORDS.test(text)) return "Crypto";
+  if (AI_KEYWORDS.test(text)) return "AI";
+  return "Other";
+}
 
 // ─── Score helper (mirrors scraper logic, kept here to avoid circular import) ──
 
@@ -75,6 +102,7 @@ function toRow(post: TrendPost, dateScraped: string): string[] {
     String(post.comments),
     String(viralityScore(post)),
     post.createdAt,
+    categorizePost(post),
   ];
 }
 
