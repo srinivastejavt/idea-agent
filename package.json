@@ -1,0 +1,30 @@
+{
+  "name": "idea-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "trigger dev",
+    "deploy": "trigger deploy",
+    "test:scraper": "npx tsx src/scraper.ts",
+    "test:prompt": "npx tsx src/prompt.ts",
+    "compare:models": "npx tsx scripts/compare-models.ts",
+    "setup:webhook": "npx tsx scripts/setup-webhook.ts",
+    "setup:sheet": "npx tsx scripts/setup-sheet.ts",
+    "auth:google": "npx tsx scripts/get-google-token.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "@trigger.dev/sdk": "4.4.6",
+    "dotenv": "^16.0.0",
+    "googleapis": "^144.0.0",
+    "openai": "^4.0.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

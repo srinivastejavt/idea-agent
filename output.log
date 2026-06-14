@@ -1,0 +1,51 @@
+
+> idea-agent@1.0.0 test:prompt
+> npx tsx src/prompt.ts
+
+[test] Scraping trends...
+[scraper] Fetching trends from all sources...
+[scraper] Twitter/X: Phase 2 — set APIFY_API_TOKEN to enable
+[scraper] Raw counts by source: {
+  hackernews: 169,
+  techcrunch: 20,
+  lobsters: 25,
+  huggingface: 20,
+  devto: 30,
+  github: 18
+}
+[scraper] Top 50 source breakdown: { hackernews: 20, github: 8, devto: 8, huggingface: 8, techcrunch: 6 }
+[scraper] 282 raw → 251 deduped (→ Sheets) → top 50 (→ LLM)
+[test] Got 50 posts, generating ideas...
+[prompt] Extracting top 3 trends from fresh scrape...
+[prompt] Trend 1: The US government's suspension of access to Fable 5 and Mythos 5, alongside suspicions of an Israeli firm meddling in elections, suggests an underlying concern about foreign influence or control over critical technologies and democratic processes.
+[prompt] Trend 2: There is significant debate and concern around the viability and implications of open-source AI, particularly regarding its competitive standing against closed-source models, security, and sudden project archiving after funding rounds.
+[prompt] Trend 3: New developments in cancer treatment via CRISPR technology are generating excitement, while simultaneously, reports of malware creators embedding bizarre terms like 'nuclear and biological weapons' in their spyware highlight the contrast between technological advancements for good and destructive purposes.
+[prompt] Generating ideas from 2 models in parallel...
+[prompt] Gemini 2.5 Flash: 9 ideas
+[prompt] Llama 4 Maverick: 9 ideas
+
+=== RESULT ===
+TREND: The US government's suspension of access to Fable 5 and Mythos 5, alongside suspicions of an Israeli firm meddling in elections, suggests an underlying concern about foreign influence or control over critical technologies and democratic processes. | There is significant debate and concern around the viability and implications of open-source AI, particularly regarding its competitive standing against closed-source models, security, and sudden project archiving after funding rounds. | New developments in cancer treatment via CRISPR technology are generating excitement, while simultaneously, reports of malware creators embedding bizarre terms like 'nuclear and biological weapons' in their spyware highlight the contrast between technological advancements for good and destructive purposes.
+MECHANIC: The connection of a government directive with election meddling suspicions creates a 'shadow' over the Fable story, intertwining geopolitical intrigue with tech policy in a surprising way.
+
+IDEAS:
+1. [Gemini 2.5 Flash] Fable/Mythos Freeze Index — Rank every country by their 'Fable/Mythos Freeze Likelihood' based on their public statements about foreign influence in AI, national security, and partnerships with Israeli tech firms. A perfect 0 means total trust, 100 means full ban is imminent. [weekend: true]
+2. [Gemini 2.5 Flash] Election Meddler GPS — Cross-reference every public statement made by US politicians regarding 'election meddling' with the specific countries they blame and the tech firms they've taken donations from. Generate a live heatmap of perceived threats. [weekend: false]
+3. [Gemini 2.5 Flash] Critical Tech Audit Log — A live feed detailing every government agency's (DoD, CIA, NSA) public procurement notices for 'critical AI' or 'national security software', noting vendor country of origin and any recent 'suspensions'. [weekend: false]
+4. [Gemini 2.5 Flash] Open-Source Graveyard — Track the top 100 open-source AI projects on Hugging Face and GitHub. Score each by its 'Funding-to-Archive' ratio: how many weeks between last funding announcement and archive/stagnation. Mistral's could be interesting. [weekend: true]
+5. [Gemini 2.5 Flash] AI Ideology Compass — Compare public statements from executives at OpenAI, Anthropic, and Meta against prominent open-source AI advocates (e.g., Stability AI) on an 'Open vs. Closed' spectrum. Output a dynamically updating political compass diagram for AI. [weekend: true]
+6. [Gemini 2.5 Flash] Security Theater Score — Rate every open-source AI model (e.g., Llama 3, Falcon, Phi-3) on a 'Security Theater Score' based on the frequency of their public security audits versus reported vulnerabilities and 'sudden fixes'. [weekend: false]
+7. [Gemini 2.5 Flash] CRISPR-to-Malware Index — A live tracker showing the market cap growth of CRISPR biotech companies (e.g., CRISPR Therapeutics, Intellia Therapeutics) versus the daily count of malware containing 'nuclear' or 'biological' keywords in their code comments/metadata. See who wins the race. [weekend: false]
+8. [Gemini 2.5 Flash] Bizarre Malware Bingo — Scrape GitHub for newly pushed open-source malware and extract the most outlandish strings or comments. Generate a 'Bizarre Malware Bingo' card updated hourly with phrases like 'weaponized duck', 'alien code', or 'quantum chaos bomb'. [weekend: true]
+9. [Gemini 2.5 Flash] Tech Ethics See-Saw — Illustrate the 'Tech Ethics See-Saw': one side showing PR announcements from NIH/CRISPR firms about 'curing cancer', the other side showing dark web forum mentions of 'bioweapon code' alongside trending spyware. See which side weighs heavier. [weekend: false]
+10. [Llama 4 Maverick] Election Influence Tracker — Map reported foreign influence operations against US election tech vendors like Fable 5 and Mythos 5 [weekend: true]
+11. [Llama 4 Maverick] GeoRisk Score — Rate companies like NSO Group and Cellebrite by country-of-origin geopolitical risk factors and export controls [weekend: false]
+12. [Llama 4 Maverick] Spyware Lexicon — Track malware creators' bizarre embedded terms like 'nuclear and biological weapons' across major threat datasets [weekend: true]
+13. [Llama 4 Maverick] OSS AI Power Rankings — Rank open-source AI models like Llama and Mistral against top closed models like GPT-4 on benchmarks [weekend: false]
+14. [Llama 4 Maverick] AI Project Mortality — Calculate death rate of open-source AI projects post-funding round, featuring projects like Stable Diffusion [weekend: true]
+15. [Llama 4 Maverick] Open Source Security Audit — Score popular open-source AI projects by security metrics and vulnerability disclosure practices [weekend: false]
+16. [Llama 4 Maverick] CRISPR Innovation Radar — Plot CRISPR cancer treatment breakthroughs by institution, researcher, and publication venue [weekend: false]
+17. [Llama 4 Maverick] Dual-Use Tech Watch — Monitor CRISPR and AI research by affiliation, funding source, and potential dual-use applications [weekend: false]
+18. [Llama 4 Maverick] BioMalware Comparator — Compare language used in CRISPR research papers vs. malware code snippets featuring 'nuclear and biological weapons' [weekend: true]
+
+TOP PICK: Fable/Mythos Freeze Index — top pick from Gemini 2.5 Flash
