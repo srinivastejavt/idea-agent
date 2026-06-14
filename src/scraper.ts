@@ -53,7 +53,11 @@ export interface TrendPost {
     | "cryptobriefing"
     | "beincrypto"
     | "bankless"
-    | "cryptonews";
+    | "cryptonews"
+    | "dlnews"
+    | "wublockchain"
+    | "coingeckonews"
+    | "rwaxyz";
   subreddit?: string;
   description?: string;
   createdAt: string;
@@ -655,6 +659,93 @@ async function scrapeCryptonews(): Promise<TrendPost[]> {
     }));
 }
 
+// ─── DL News ─────────────────────────────────────────────────────────────────
+
+async function scrapeDLNews(): Promise<TrendPost[]> {
+  const res = await safeFetch("https://www.dlnews.com/arc/outboundfeeds/rss/", {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+  });
+  if (!res) return [];
+  const xml = await safeText(res);
+  return parseRssItems(xml)
+    .slice(0, 20)
+    .map((item) => ({
+      title: item.title,
+      url: item.link,
+      points: 0,
+      comments: 0,
+      source: "dlnews" as const,
+      description: item.description,
+      createdAt: new Date(item.pubDate).toISOString(),
+    }));
+}
+
+// ─── Wu Blockchain ────────────────────────────────────────────────────────────
+
+async function scrapeWuBlockchain(): Promise<TrendPost[]> {
+  // Wu Blockchain publishes on Substack — RSS available without auth
+  const res = await safeFetch("https://wublockchain.substack.com/feed", {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+  });
+  if (!res) return [];
+  const xml = await safeText(res);
+  return parseRssItems(xml)
+    .slice(0, 15)
+    .map((item) => ({
+      title: item.title,
+      url: item.link,
+      points: 0,
+      comments: 0,
+      source: "wublockchain" as const,
+      description: item.description,
+      createdAt: new Date(item.pubDate).toISOString(),
+    }));
+}
+
+// ─── CoinGecko News ───────────────────────────────────────────────────────────
+
+async function scrapeCoinGeckoNews(): Promise<TrendPost[]> {
+  // CoinGecko aggregates crypto news with engagement signals
+  const res = await safeFetch("https://www.coingecko.com/news.rss", {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+  });
+  if (!res) return [];
+  const xml = await safeText(res);
+  return parseRssItems(xml)
+    .slice(0, 20)
+    .map((item) => ({
+      title: item.title,
+      url: item.link,
+      points: 0,
+      comments: 0,
+      source: "coingeckonews" as const,
+      description: item.description,
+      createdAt: new Date(item.pubDate).toISOString(),
+    }));
+}
+
+// ─── rwa.xyz Newswire ─────────────────────────────────────────────────────────
+
+async function scrapeRwaXyz(): Promise<TrendPost[]> {
+  // RWA.xyz covers real-world asset tokenization — fastest growing crypto sector
+  const res = await safeFetch("https://rwa.xyz/news/feed", {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+  });
+  if (!res) return [];
+  const xml = await safeText(res);
+  return parseRssItems(xml)
+    .slice(0, 15)
+    .map((item) => ({
+      title: item.title,
+      url: item.link,
+      points: 0,
+      comments: 0,
+      source: "rwaxyz" as const,
+      description: item.description,
+      createdAt: new Date(item.pubDate).toISOString(),
+    }));
+}
+
 // ─── HuggingFace Daily Papers ────────────────────────────────────────────────
 
 async function scrapeHuggingFacePapers(): Promise<TrendPost[]> {
@@ -857,6 +948,10 @@ function scorePost(post: TrendPost): number {
     beincrypto: 1.0,       // broad web3 coverage
     bankless: 1.2,         // DeFi/DAO ecosystem — high signal for on-chain trends
     cryptonews: 0.9,       // general crypto
+    dlnews: 1.2,           // high-quality institutional crypto journalism
+    wublockchain: 1.3,     // insider China/Asia crypto intel — high signal
+    coingeckonews: 1.1,    // aggregated crypto news with market context
+    rwaxyz: 1.3,           // RWA tokenization — fastest growing sector
     indiehackers: 1.0,
     reddit: 1.0,
     devto: 0.9,
@@ -887,7 +982,8 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
 
   const [hn, reddit, yc, ph, tc, lobsters, hf, devto, github, ih, bsky, twitter,
          coindesk, cointelegraph, decrypt, theblock, blockworks, bitcoinmag,
-         messari, cryptoslate, cryptobriefing, beincrypto, bankless, cryptonews] =
+         messari, cryptoslate, cryptobriefing, beincrypto, bankless, cryptonews,
+         dlnews, wublockchain, coingeckonews, rwaxyz] =
     await Promise.allSettled([
       scrapeHackerNews(),
       scrapeReddit(),
@@ -913,6 +1009,10 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
       scrapeBeInCrypto(),
       scrapeBankless(),
       scrapeCryptonews(),
+      scrapeDLNews(),
+      scrapeWuBlockchain(),
+      scrapeCoinGeckoNews(),
+      scrapeRwaXyz(),
     ]);
 
   const raw: TrendPost[] = [
@@ -940,6 +1040,10 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
     ...(beincrypto.status === "fulfilled" ? beincrypto.value : []),
     ...(bankless.status === "fulfilled" ? bankless.value : []),
     ...(cryptonews.status === "fulfilled" ? cryptonews.value : []),
+    ...(dlnews.status === "fulfilled" ? dlnews.value : []),
+    ...(wublockchain.status === "fulfilled" ? wublockchain.value : []),
+    ...(coingeckonews.status === "fulfilled" ? coingeckonews.value : []),
+    ...(rwaxyz.status === "fulfilled" ? rwaxyz.value : []),
   ];
 
   const sourceCounts = raw.reduce(
@@ -976,6 +1080,10 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
     beincrypto:       6,
     bankless:         5,
     cryptonews:       5,
+    dlnews:           8,
+    wublockchain:     6,
+    coingeckonews:    8,
+    rwaxyz:           6,
   };
 
   const scored = [...all].sort((a, b) => scorePost(b) - scorePost(a));
@@ -988,6 +1096,7 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
     "coindesk", "cointelegraph", "decrypt", "theblock", "blockworks",
     "bitcoinmagazine", "messari", "cryptoslate", "cryptobriefing",
     "beincrypto", "bankless", "cryptonews",
+    "dlnews", "wublockchain", "coingeckonews", "rwaxyz",
   ]);
   const cryptoReserved = scored.filter(p => CRYPTO_SOURCES.has(p.source)).slice(0, 10);
 
