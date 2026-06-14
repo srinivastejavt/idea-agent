@@ -53,6 +53,18 @@ export function formatDailyBrief(result: IdeaResult): string {
     }
   }
 
+  if (result.tweetIdeas?.length) {
+    lines.push("", "─────────────────");
+    lines.push("🐦 *TWEET ANGLES*");
+    lines.push("_Pick one, take it to Claude chat, make it yours_");
+    for (const { trend, angles } of result.tweetIdeas) {
+      lines.push("", `📌 _${trend}_`);
+      for (const angle of angles) {
+        lines.push(`• ${angle}`);
+      }
+    }
+  }
+
   return lines.join("\n");
 }
 

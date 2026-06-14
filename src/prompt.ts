@@ -32,6 +32,11 @@ export interface Idea {
   category?: "ai" | "crypto" | "other";
 }
 
+export interface TweetIdea {
+  trend: string;        // the headline trend
+  angles: string[];     // 3 angles/hooks to post about
+}
+
 export interface IdeaResult {
   trend: string;
   mechanic: string;
@@ -44,6 +49,7 @@ export interface IdeaResult {
     crypto: string[];
     other: string[];
   };
+  tweetIdeas: TweetIdea[];
 }
 
 // ─── Voice reference ──────────────────────────────────────────────────────────
@@ -222,6 +228,60 @@ function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
   });
 }
 
+// ─── Step 3: Generate tweet angles per trend ─────────────────────────────────
+// Not full drafts — just 3 distinct angles/hooks per trend that the user can
+// take to Claude chat and turn into their own tweet in their own voice.
+
+async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
+  const response = await client.chat.completions.create({
+    model: "deepseek/deepseek-v4-flash", // cheap + fast, no need for heavy reasoning
+    max_tokens: 1000,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: `You help a solo tech founder identify interesting angles to tweet about tech/crypto/startup news.
+
+Your job: for each trend, give 3 distinct angles that make for a compelling tweet. These are NOT drafts — they are hooks/framings the founder will develop themselves.
+
+Good angles:
+- The uncomfortable truth most people aren't saying
+- The hidden incentive or who actually benefits
+- The contrarian or "actually..." take
+- The historical pattern this repeats
+- The specific implication for founders/builders
+
+Bad angles (avoid):
+- Generic observations ("X is growing fast")
+- Obvious takes everyone already has
+- Fence-sitting ("it could go either way")
+
+Each angle should be one punchy sentence — a hook, not an essay.
+
+Respond ONLY with valid JSON. No markdown.`,
+      },
+      {
+        role: "user",
+        content: `Today's trends:
+${trends.map((t, i) => `${i + 1}. ${t.trend}`).join("\n")}
+
+For each trend, give 3 distinct tweet angles. Return JSON:
+{
+  "tweetIdeas": [
+    {"trend": "one-line summary of trend 1", "angles": ["angle 1", "angle 2", "angle 3"]},
+    {"trend": "one-line summary of trend 2", "angles": ["angle 1", "angle 2", "angle 3"]},
+    {"trend": "one-line summary of trend 3", "angles": ["angle 1", "angle 2", "angle 3"]}
+  ]
+}`,
+      },
+    ],
+  });
+
+  const text = stripFences(response.choices[0].message.content ?? "{}");
+  const { tweetIdeas } = JSON.parse(text);
+  return (tweetIdeas ?? []) as TweetIdea[];
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export interface PreviousRun {
@@ -247,14 +307,19 @@ export async function generateDailyIdeas(
     console.log(`[prompt] ${likedIdeas.length} liked ideas from history — using as style guide`);
   }
 
-  // Generate ~3-4 ideas per trend per model, all in parallel
-  // Each model handles all 3 trends in one call to save API round trips
-  console.log(`[prompt] Generating ideas from ${IDEA_MODELS.length} models in parallel...`);
-  const results = await Promise.allSettled(
-    IDEA_MODELS.map(m =>
-      generateIdeasFromModel(m.id, m.label, trends, previousRuns, likedIdeas)
-    )
-  );
+  // Generate ideas + tweet angles in parallel
+  console.log(`[prompt] Generating ideas from ${IDEA_MODELS.length} models + tweet angles in parallel...`);
+  const [results, tweetIdeas] = await Promise.all([
+    Promise.allSettled(
+      IDEA_MODELS.map(m =>
+        generateIdeasFromModel(m.id, m.label, trends, previousRuns, likedIdeas)
+      )
+    ),
+    generateTweetIdeas(trends).catch(err => {
+      console.warn("[prompt] Tweet ideas failed:", err?.message);
+      return [] as TweetIdea[];
+    }),
+  ]);
 
   const allIdeas: Idea[] = [];
   for (const [i, result] of results.entries()) {
@@ -280,6 +345,8 @@ export async function generateDailyIdeas(
     crypto: trends.filter(t => t.category === "crypto").map(t => t.trend),
     other:  trends.filter(t => !t.category || t.category === "other").map(t => t.trend),
   };
+  console.log(`[prompt] Tweet angles: ${tweetIdeas.length} trends covered`);
+
   return {
     trend: trends.map(t => t.trend).join(" | "),
     mechanic: primary.mechanic,
@@ -290,6 +357,7 @@ export async function generateDailyIdeas(
       .filter(t => t.sourceUrl && t.sourceTitle)
       .map(t => ({ title: t.sourceTitle!, url: t.sourceUrl! })),
     trendsByCategory,
+    tweetIdeas,
   };
 }
 
