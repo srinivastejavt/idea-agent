@@ -126,7 +126,7 @@ Respond ONLY with valid JSON. No markdown, no explanation.`,
       },
       {
         role: "user",
-        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt", "category": "ai if about AI/ML/LLMs, crypto if about blockchain/crypto/DeFi/web3, other for everything else", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}`,
+        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt|coindesk|cointelegraph|dlnews|wublockchain|coingeckonews|rwaxyz|blockworks|theblock|decrypt", "category": "ai if about AI/ML/LLMs, crypto if about blockchain/crypto/DeFi/web3/RWA/stablecoins, other for everything else", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}\n\nIMPORTANT: If any posts come from crypto sources (coindesk, cointelegraph, decrypt, theblock, blockworks, dlnews, wublockchain, coingeckonews, rwaxyz, beincrypto, bankless, cryptonews), you MUST include at least 1 crypto trend. Crypto RSS feeds show 0 points/comments by design — low scores do NOT mean low importance for that community.`,
       },
     ],
   });

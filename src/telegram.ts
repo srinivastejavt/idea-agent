@@ -33,23 +33,13 @@ export function formatDailyBrief(result: IdeaResult): string {
 
     const headlines = result.trendsByCategory[key];
 
-    const geminiIdeas   = catIdeas.filter(i => i.model?.includes("Gemini"));
-    const deepseekIdeas = catIdeas.filter(i => i.model?.includes("DeepSeek"));
-
     lines.push("", `━━━ ${emoji} *${label}* ━━━`);
-    for (const h of headlines) lines.push(`_${h}_`);
+    // One headline for context, then straight into ideas (no model sub-headers)
+    if (headlines[0]) lines.push(`_${headlines[0]}_`);
+    lines.push("");
 
-    if (geminiIdeas.length > 0) {
-      lines.push("", "🔵 _Gemini 2.5 Flash_");
-      for (const idea of geminiIdeas) {
-        lines.push(`${globalIdx++}\\. *${idea.name}* ${idea.weekendBuild ? "🟢" : "🔴"} — ${idea.description}`);
-      }
-    }
-    if (deepseekIdeas.length > 0) {
-      lines.push("", "🟠 _DeepSeek V4 Flash_");
-      for (const idea of deepseekIdeas) {
-        lines.push(`${globalIdx++}\\. *${idea.name}* ${idea.weekendBuild ? "🟢" : "🔴"} — ${idea.description}`);
-      }
+    for (const idea of catIdeas) {
+      lines.push(`${globalIdx++}\\. *${idea.name}* ${idea.weekendBuild ? "🟢" : "🔴"} — ${idea.description}`);
     }
   }
 
