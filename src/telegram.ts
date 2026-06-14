@@ -27,6 +27,10 @@ export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
 
   const modelLine = `🤖 _Gemini 2.5 Flash (1-${geminiIdeas.length}) · Llama 4 Maverick (${geminiIdeas.length + 1}-${geminiIdeas.length + llamaIdeas.length})_`;
 
+  const sourcesText = result.sources?.length
+    ? [``, `📰 *SOURCES:*`, ...result.sources.map(s => `• [${s.title.slice(0, 60)}](${s.url})`)]
+    : [];
+
   return [
     `🔥 *TREND:* ${result.trend}`,
     ``,
@@ -38,6 +42,7 @@ export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
     ideasText,
     ``,
     `⚡ *TOP PICK:* ${result.topPick}`,
+    ...sourcesText,
   ].join("\n");
 }
 

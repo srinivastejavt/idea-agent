@@ -37,6 +37,7 @@ export interface IdeaResult {
   trendSource: string;
   ideas: Idea[];
   topPick: string;
+  sources: { title: string; url: string }[];
 }
 
 // ─── Voice reference ──────────────────────────────────────────────────────────
@@ -86,6 +87,8 @@ interface TrendSignal {
   mechanic: string;
   rawMechanic: "leaderboard" | "roast" | "weird_data_combo" | "relatable_truth" | "other";
   trendSource: string;
+  sourceUrl?: string;
+  sourceTitle?: string;
 }
 
 async function extractTrends(posts: TrendPost[]): Promise<TrendSignal[]> {
@@ -97,7 +100,7 @@ async function extractTrends(posts: TrendPost[]): Promise<TrendSignal[]> {
 
   const response = await client.chat.completions.create({
     model: TREND_MODEL,
-    max_tokens: 2000,  // Gemini 2.5 Flash thinking needs extra headroom
+    max_tokens: 2000,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -116,14 +119,25 @@ Respond ONLY with valid JSON. No markdown, no explanation.`,
       },
       {
         role: "user",
-        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt"}, ...3 items total]}`,
+        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}`,
       },
     ],
   });
 
   const text = stripFences(response.choices[0].message.content ?? "{}");
   const { trends } = JSON.parse(text);
-  return (trends ?? []).slice(0, 3) as TrendSignal[];
+  const signals = (trends ?? []).slice(0, 3) as (TrendSignal & { postIndex?: number })[];
+
+  // Attach the source URL + title from the original posts array
+  return signals.map(t => {
+    const idx = (t.postIndex ?? 1) - 1;
+    const post = posts[idx];
+    return {
+      ...t,
+      sourceUrl: post?.url,
+      sourceTitle: post?.title,
+    };
+  });
 }
 
 // ─── Step 2: Generate ideas from one model ────────────────────────────────────
@@ -235,6 +249,9 @@ export async function generateDailyIdeas(
     trendSource: primary.trendSource,
     ideas: allIdeas,
     topPick,
+    sources: trends
+      .filter(t => t.sourceUrl && t.sourceTitle)
+      .map(t => ({ title: t.sourceTitle!, url: t.sourceUrl! })),
   };
 }
 
