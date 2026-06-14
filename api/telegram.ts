@@ -1,15 +1,16 @@
 /**
- * Vercel Serverless Function — Telegram Webhook Proxy
+ * Vercel Edge Function — Telegram Webhook Proxy
  *
  * Telegram POSTs callback_query events here when a button is tapped.
- * We await the Trigger.dev call before returning 200 — the API responds
- * in ~200ms so Telegram won't timeout. (Previously used fire-and-forget
- * with edge runtime, but edge functions terminate immediately after
- * returning a response, killing the background fetch before it fires.)
+ * We AWAIT the Trigger.dev call before returning 200 — this keeps the
+ * edge function alive long enough to complete it. (The original bug was
+ * fire-and-forget: the edge function terminated on response, killing the fetch.)
  *
  * Required env vars (set in Vercel dashboard):
  *   TRIGGER_SECRET_KEY  — Secret key from Trigger.dev → project settings
  */
+
+export const config = { runtime: "edge" };
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") {
@@ -23,6 +24,7 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Bad request", { status: 400 });
   }
 
+  // AWAIT before returning — keeps edge function alive until fetch completes
   try {
     const res = await fetch("https://api.trigger.dev/api/v1/tasks/telegram-webhook/trigger", {
       method: "POST",
@@ -36,7 +38,7 @@ export default async function handler(req: Request): Promise<Response> {
       const text = await res.text();
       console.error(`[webhook-proxy] Trigger.dev returned ${res.status}: ${text}`);
     } else {
-      console.log(`[webhook-proxy] Trigger.dev task queued OK`);
+      console.log("[webhook-proxy] Trigger.dev task queued OK");
     }
   } catch (err) {
     console.error("[webhook-proxy] Trigger.dev call failed:", err);
