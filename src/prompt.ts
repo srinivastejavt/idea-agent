@@ -37,6 +37,14 @@ export interface TweetIdea {
   angles: string[];     // 3 angles/hooks to post about
 }
 
+export interface MediaRec {
+  show:   string;
+  title:  string;
+  url:    string;
+  type:   "podcast" | "youtube";
+  reason: string; // one sentence: why relevant to today's trends
+}
+
 export interface IdeaResult {
   trend: string;
   mechanic: string;
@@ -358,6 +366,55 @@ export async function generateDailyIdeas(
     trendsByCategory,
     tweetIdeas,
   };
+}
+
+// ─── Media recommendations ────────────────────────────────────────────────────
+
+export async function pickMediaRecs(
+  trendSummary: string,
+  media: import("./media").MediaItem[]
+): Promise<MediaRec[]> {
+  if (!media.length) return [];
+
+  const catalogue = media
+    .slice(0, 40) // cap to avoid token bloat
+    .map((m, i) => `${i + 1}. [${m.type === "youtube" ? "YT" : "POD"}] ${m.show} — "${m.title}"`)
+    .join("\n");
+
+  const prompt = `Today's trending topics in AI/crypto/startups:
+${trendSummary}
+
+Recent episodes/videos available:
+${catalogue}
+
+Pick 2-3 that are most relevant to today's trends. Prioritise episodes that directly discuss, debate, or provide context on what's trending today. Mix podcast + YouTube if possible.
+
+Reply with JSON only — an array of objects:
+[{ "index": <1-based number>, "reason": "<one sentence: why this is relevant to today>" }]`;
+
+  const res = await client.chat.completions.create({
+    model: "deepseek/deepseek-v4-flash",
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  try {
+    const raw = res.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw);
+    const picks: { index: number; reason: string }[] = Array.isArray(parsed)
+      ? parsed
+      : parsed.picks ?? parsed.recommendations ?? [];
+
+    return picks.slice(0, 3).map(p => {
+      const item = media[p.index - 1];
+      if (!item) return null;
+      return { show: item.show, title: item.title, url: item.url, type: item.type, reason: p.reason };
+    }).filter(Boolean) as MediaRec[];
+  } catch {
+    console.warn("[prompt] pickMediaRecs: failed to parse response");
+    return [];
+  }
 }
 
 // ─── Run directly for testing ─────────────────────────────────────────────────

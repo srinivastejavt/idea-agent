@@ -11,14 +11,15 @@
 
 import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
-import { generateDailyIdeas } from "../prompt";
+import { generateDailyIdeas, pickMediaRecs } from "../prompt";
 import { saveIdeas, updateFeedback, saveLikedIdea, getTodaysRuns, getRecentLikedIdeas } from "../supabase";
 import { sendDailyBrief, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
+import { fetchRecentMedia } from "../media";
 
 // ─── Shared run logic (used by all 3 cron tasks) ─────────────────────────────
 
-async function runIdeaGeneration(runLabel: string) {
+async function runIdeaGeneration(runLabel: string, includeMedia = false) {
   console.log(`[daily-ideas] ${runLabel} run starting...`);
 
   // 1. Scrape trends
@@ -53,10 +54,17 @@ async function runIdeaGeneration(runLabel: string) {
   // 5. Save to Supabase
   const stored = await saveIdeas(result, topTrends);
 
-  // 6. Send to Telegram
-  const messageId = await sendDailyBrief(result, stored.id);
+  // 6. Fetch media recs in parallel if this is the evening run
+  const mediaRecs = includeMedia
+    ? await fetchRecentMedia()
+        .then(items => pickMediaRecs(result.trend, items))
+        .catch(err => { console.error("[daily-ideas] media recs failed (non-fatal):", err.message); return []; })
+    : [];
 
-  // 7. Update Supabase with Telegram message ID (reuse supabase module)
+  // 7. Send to Telegram
+  const messageId = await sendDailyBrief(result, stored.id, mediaRecs);
+
+  // 8. Update Supabase with Telegram message ID (reuse supabase module)
   const { updateTelegramMessageId } = await import("../supabase");
   await updateTelegramMessageId(stored.id, messageId);
 
@@ -83,7 +91,7 @@ export const morningRun = schedules.task({
 export const eveningRun = schedules.task({
   id: "idea-generator-evening",
   cron: "30 12 * * *",  // 6:00pm IST — EU full day + US pre-market buzz
-  run: () => runIdeaGeneration("Evening (6pm IST)"),
+  run: () => runIdeaGeneration("Evening (6pm IST)", true), // true = include media recs
 });
 
 // ─── Run 3: 11:00pm IST (5:30pm UTC) ─────────────────────────────────────────

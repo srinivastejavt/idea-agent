@@ -3,7 +3,7 @@
  * Sends the daily brief and handles per-idea feedback callbacks
  */
 
-import type { IdeaResult, Idea } from "./prompt";
+import type { IdeaResult, Idea, MediaRec } from "./prompt";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
@@ -119,9 +119,22 @@ async function sendMessage(
   return data.result.message_id;
 }
 
+export function formatMediaRecs(recs: MediaRec[]): string {
+  const lines: string[] = ["🎧 *WATCH / LISTEN TONIGHT*", "_Picked based on today's trends_", ""];
+  for (const rec of recs) {
+    const icon = rec.type === "youtube" ? "▶️" : "🎙";
+    lines.push(`${icon} *${rec.show}*`);
+    lines.push(`[${rec.title.slice(0, 80)}](${rec.url})`);
+    lines.push(`_${rec.reason}_`);
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
-  ideaId: string
+  ideaId: string,
+  mediaRecs?: MediaRec[]
 ): Promise<number> {
   const text = formatDailyBrief(result);
   const chunks = chunkText(text);
@@ -138,6 +151,12 @@ export async function sendDailyBrief(
     { reply_markup: buildIdeaButtons(result.ideas.length, ideaId) }
   );
   console.log(`[telegram] Feedback buttons sent: ${feedbackMsg}`);
+
+  // Send media recs as a separate message (evening run only)
+  if (mediaRecs?.length) {
+    await sendMessage(formatMediaRecs(mediaRecs));
+    console.log(`[telegram] Media recs sent: ${mediaRecs.length} picks`);
+  }
 
   return lastMessageId;
 }
