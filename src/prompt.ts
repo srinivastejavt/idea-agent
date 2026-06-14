@@ -377,7 +377,7 @@ export async function pickMediaRecs(
   if (!media.length) return [];
 
   const catalogue = media
-    .slice(0, 40) // cap to avoid token bloat
+    .slice(0, 60) // cap to avoid token bloat
     .map((m, i) => `${i + 1}. [${m.type === "youtube" ? "YT" : "POD"}] ${m.show} — "${m.title}"`)
     .join("\n");
 
@@ -387,7 +387,7 @@ ${trendSummary}
 Recent episodes/videos available:
 ${catalogue}
 
-Pick 2-3 that are most relevant to today's trends. Prioritise episodes that directly discuss, debate, or provide context on what's trending today. Mix podcast + YouTube if possible.
+Pick ALL episodes that are genuinely relevant to today's trends — could be 3, could be 10+. Do not cap arbitrarily. Only skip ones with no connection to today's topics. Prioritise episodes that directly discuss, debate, or provide context on what's trending. Mix podcasts + YouTube.
 
 Reply with JSON only — an array of objects:
 [{ "index": <1-based number>, "reason": "<one sentence: why this is relevant to today>" }]`;
@@ -406,7 +406,7 @@ Reply with JSON only — an array of objects:
       ? parsed
       : parsed.picks ?? parsed.recommendations ?? [];
 
-    return picks.slice(0, 3).map(p => {
+    return picks.map(p => {
       const item = media[p.index - 1];
       if (!item) return null;
       return { show: item.show, title: item.title, url: item.url, type: item.type, reason: p.reason };
