@@ -202,6 +202,90 @@ export async function updateTelegramMessageId(id: string, messageId: number): Pr
   if (error) throw new Error(`Supabase update telegram_message_id failed: ${error.message}`);
 }
 
+// ─── Weekly quality stats ─────────────────────────────────────────────────────
+
+export interface WeeklyStats {
+  totalRuns:       number;
+  totalIdeas:      number;
+  totalLiked:      number;
+  likeRate:        number;           // 0-1
+  byCategory:      Record<string, number>; // category → liked count
+  topKeywords:     string[];         // most common words in liked idea names
+  prevWeekRate:    number | null;    // like rate from prior week for comparison
+}
+
+export async function computeWeeklyStats(): Promise<WeeklyStats> {
+  const now = new Date();
+  const weekAgo  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  // This week
+  const { data: thisWeek } = await supabase
+    .from("ideas")
+    .select("ideas_json, liked_ideas")
+    .gte("created_at", weekAgo.toISOString())
+    .order("created_at", { ascending: false });
+
+  // Previous week (for trend comparison)
+  const { data: lastWeek } = await supabase
+    .from("ideas")
+    .select("ideas_json, liked_ideas")
+    .gte("created_at", twoWeeksAgo.toISOString())
+    .lt("created_at", weekAgo.toISOString());
+
+  const rows = thisWeek ?? [];
+  const totalRuns  = rows.length;
+  const totalIdeas = rows.reduce((sum, r) => sum + (r.ideas_json?.length ?? 0), 0);
+
+  // Collect liked ideas
+  const likedIdeas: { name: string; category?: string }[] = [];
+  for (const row of rows) {
+    const indices: number[] = row.liked_ideas ?? [];
+    const ideas: { name: string; category?: string }[] = row.ideas_json ?? [];
+    for (const idx of indices) {
+      if (ideas[idx]) likedIdeas.push(ideas[idx]);
+    }
+  }
+
+  // By category
+  const byCategory: Record<string, number> = {};
+  for (const idea of likedIdeas) {
+    const cat = idea.category ?? "other";
+    byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+  }
+
+  // Top keywords from liked idea names
+  const stopwords = new Set(["a","an","the","and","or","for","to","of","in","on","with","that","this","is","are","it","as","by","at","from","your","you","how","what","build","tool","app","platform"]);
+  const wordFreq: Record<string, number> = {};
+  for (const idea of likedIdeas) {
+    for (const word of idea.name.toLowerCase().split(/\W+/)) {
+      if (word.length > 3 && !stopwords.has(word)) {
+        wordFreq[word] = (wordFreq[word] ?? 0) + 1;
+      }
+    }
+  }
+  const topKeywords = Object.entries(wordFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([w]) => w);
+
+  // Prev week like rate
+  const prevRows = lastWeek ?? [];
+  const prevTotal = prevRows.reduce((sum, r) => sum + (r.ideas_json?.length ?? 0), 0);
+  const prevLiked = prevRows.reduce((sum, r) => sum + (r.liked_ideas?.length ?? 0), 0);
+  const prevWeekRate = prevTotal > 0 ? prevLiked / prevTotal : null;
+
+  return {
+    totalRuns,
+    totalIdeas,
+    totalLiked: likedIdeas.length,
+    likeRate: totalIdeas > 0 ? likedIdeas.length / totalIdeas : 0,
+    byCategory,
+    topKeywords,
+    prevWeekRate,
+  };
+}
+
 // ─── Get by Telegram message ID (for callback routing) ───────────────────────
 
 export async function getByTelegramMessageId(

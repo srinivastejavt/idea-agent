@@ -12,8 +12,8 @@
 import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas, pickMediaRecs } from "../prompt";
-import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia } from "../supabase";
-import { sendDailyBrief, parseCallback, answerCallback } from "../telegram";
+import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia, computeWeeklyStats } from "../supabase";
+import { sendDailyBrief, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 import { fetchRecentMedia } from "../media";
 
@@ -107,6 +107,20 @@ export const nightRun = schedules.task({
   id: "idea-generator-night",
   cron: "30 17 * * *",  // 11:00pm IST — US morning/afternoon peak (best run)
   run: () => runIdeaGeneration("Night (11pm IST)"),
+});
+
+// ─── Weekly quality digest — every Monday 8am IST (2:30am UTC) ───────────────
+
+export const weeklyDigestRun = schedules.task({
+  id: "idea-generator-weekly-digest",
+  cron: "30 2 * * 1", // Monday 8am IST
+  run: async () => {
+    console.log("[weekly-digest] Computing stats...");
+    const stats = await computeWeeklyStats();
+    await sendWeeklyDigest(stats);
+    console.log("[weekly-digest] Done");
+    return { success: true, totalLiked: stats.totalLiked, likeRate: stats.likeRate };
+  },
 });
 
 // ─── Telegram webhook handler ─────────────────────────────────────────────────

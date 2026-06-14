@@ -177,6 +177,54 @@ export async function sendDailyBrief(
   return lastMessageId;
 }
 
+// ─── Weekly quality digest ────────────────────────────────────────────────────
+
+export async function sendWeeklyDigest(stats: import("./supabase").WeeklyStats): Promise<void> {
+  const pct = (stats.likeRate * 100).toFixed(0);
+  const prevPct = stats.prevWeekRate !== null ? (stats.prevWeekRate * 100).toFixed(0) : null;
+  const trend = prevPct === null
+    ? ""
+    : stats.likeRate > stats.prevWeekRate!
+      ? ` ↑ up from ${prevPct}% last week`
+      : stats.likeRate < stats.prevWeekRate!
+        ? ` ↓ down from ${prevPct}% last week`
+        : " → same as last week";
+
+  const topCat = Object.entries(stats.byCategory)
+    .sort((a, b) => b[1] - a[1])[0];
+
+  const lines = [
+    "📊 *WEEKLY BRIEF QUALITY REPORT*",
+    "",
+    `📅 Last 7 days: *${stats.totalRuns} briefs*, ${stats.totalIdeas} ideas generated`,
+    `❤️ Ideas you liked: *${stats.totalLiked}* (${pct}% like rate${trend})`,
+    "",
+  ];
+
+  if (topCat) {
+    const catEmoji: Record<string, string> = { ai: "🤖", crypto: "₿", other: "🌐" };
+    lines.push(`🏆 Most liked category: *${topCat[0].toUpperCase()}* ${catEmoji[topCat[0]] ?? ""} (${topCat[1]} ideas)`);
+  }
+
+  if (stats.byCategory.ai || stats.byCategory.crypto || stats.byCategory.other) {
+    const breakdown = ["ai","crypto","other"]
+      .filter(c => stats.byCategory[c])
+      .map(c => `${c}: ${stats.byCategory[c]}`)
+      .join(" · ");
+    lines.push(`📈 Breakdown: ${breakdown}`);
+  }
+
+  if (stats.topKeywords.length) {
+    lines.push("", `🔑 *Top keywords in ideas you liked:*`);
+    lines.push(stats.topKeywords.map(k => `\`${k}\``).join(" · "));
+  }
+
+  lines.push("", "_Keep tapping ideas you like — it trains the next brief_");
+
+  await sendMessage(lines.join("\n"));
+  console.log("[telegram] Weekly digest sent");
+}
+
 // ─── Callback webhook handler ─────────────────────────────────────────────────
 
 export interface TelegramCallbackQuery {
