@@ -39,12 +39,14 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false) {
     getTodaysRuns(),
     getRecentLikedIdeas(5),
   ]);
-  const likedIdeas = recentLiked.flatMap(r =>
-    (r.ideas_json ?? []).map((i: { name: string; description: string }) => ({
-      name: i.name,
-      description: i.description,
-    }))
-  ).slice(0, 5);
+  // Extract only the specifically liked ideas using liked_ideas indices
+  const likedIdeas = recentLiked.flatMap(r => {
+    const indices: number[] = r.liked_ideas ?? [];
+    const allIdeas: { name: string; description: string }[] = r.ideas_json ?? [];
+    return indices
+      .filter(idx => idx >= 0 && idx < allIdeas.length)
+      .map(idx => ({ name: allIdeas[idx].name, description: allIdeas[idx].description }));
+  }).slice(0, 8);
 
   console.log(`[daily-ideas] ${previousRuns.length} previous run(s) today, ${likedIdeas.length} liked ideas as style guide`);
 

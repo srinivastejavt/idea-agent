@@ -70,16 +70,17 @@ export async function updateFeedback(id: string, liked: boolean): Promise<void> 
 
 // ─── Fetch recent ideas (for learning / context) ──────────────────────────────
 
-export async function getRecentLikedIdeas(limit = 5): Promise<StoredIdea[]> {
+export async function getRecentLikedIdeas(limit = 10): Promise<StoredIdea[]> {
+  // Query rows where the user tapped specific ideas (liked_ideas array is non-empty)
   const { data, error } = await supabase
     .from("ideas")
     .select("*")
-    .eq("liked", true)
+    .not("liked_ideas", "is", null)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) throw new Error(`Supabase query failed: ${error.message}`);
-  return data ?? [];
+  return (data ?? []).filter(r => Array.isArray(r.liked_ideas) && r.liked_ideas.length > 0);
 }
 
 // ─── Get today's previous runs (trends + ideas) for deduplication ────────────
