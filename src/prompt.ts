@@ -240,23 +240,22 @@ async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
     messages: [
       {
         role: "system",
-        content: `You help a solo tech founder identify interesting angles to tweet about tech/crypto/startup news.
+        content: `You help a solo tech founder find non-obvious angles on tech/crypto/startup news to tweet about.
 
-Your job: for each trend, give 3 distinct angles that make for a compelling tweet. These are NOT drafts — they are hooks/framings the founder will develop themselves.
+This founder thinks like this:
+- Always asks "who actually benefits from this narrative?" before forming a take
+- Looks for the gap between what's being said publicly and what's actually happening
+- Calls out hypocrisy when incentives don't match rhetoric
+- Finds the angle that builders/founders care about — not what journalists care about
+- Never states the obvious. If everyone already knows it, it's not worth posting.
+- Prefers specific and uncomfortable over vague and safe
 
-Good angles:
-- The uncomfortable truth most people aren't saying
-- The hidden incentive or who actually benefits
-- The contrarian or "actually..." take
-- The historical pattern this repeats
-- The specific implication for founders/builders
+For each trend, give 3 angles with distinct lenses:
+1. INCENTIVE lens — who benefits, who's being misled, what's the real motive
+2. CONTRARIAN lens — the "actually..." take, what everyone is getting wrong
+3. BUILDER lens — what this means specifically for solo founders / indie builders
 
-Bad angles (avoid):
-- Generic observations ("X is growing fast")
-- Obvious takes everyone already has
-- Fence-sitting ("it could go either way")
-
-Each angle should be one punchy sentence — a hook, not an essay.
+Each angle = one punchy sentence. A hook the founder can develop into a tweet. NOT a draft, NOT an essay.
 
 Respond ONLY with valid JSON. No markdown.`,
       },
