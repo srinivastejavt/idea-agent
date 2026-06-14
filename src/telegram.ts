@@ -219,6 +219,25 @@ export async function sendWeeklyDigest(stats: import("./supabase").WeeklyStats):
     lines.push(stats.topKeywords.map(k => `\`${k}\``).join(" · "));
   }
 
+  // Model comparison
+  const modelEntries = Object.entries(stats.byModel)
+    .filter(([, v]) => v.total >= 3) // only show models with enough data
+    .sort((a, b) => b[1].rate - a[1].rate);
+
+  if (modelEntries.length > 1) {
+    lines.push("", "🤖 *Model performance this week:*");
+    for (const [model, { liked, total, rate }] of modelEntries) {
+      const shortName = model.split("/").pop() ?? model;
+      const bar = "█".repeat(Math.round(rate * 10)) + "░".repeat(10 - Math.round(rate * 10));
+      lines.push(`\`${shortName}\` ${bar} ${(rate * 100).toFixed(0)}% (${liked}/${total})`);
+    }
+    const best = modelEntries[0];
+    const worst = modelEntries[modelEntries.length - 1];
+    if (best[1].rate > worst[1].rate + 0.1) {
+      lines.push(`_→ ${best[0].split("/").pop()} is winning — consider swapping out ${worst[0].split("/").pop()}_`);
+    }
+  }
+
   lines.push("", "_Keep tapping ideas you like — it trains the next brief_");
 
   await sendMessage(lines.join("\n"));

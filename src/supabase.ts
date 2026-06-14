@@ -208,10 +208,11 @@ export interface WeeklyStats {
   totalRuns:       number;
   totalIdeas:      number;
   totalLiked:      number;
-  likeRate:        number;           // 0-1
-  byCategory:      Record<string, number>; // category → liked count
-  topKeywords:     string[];         // most common words in liked idea names
-  prevWeekRate:    number | null;    // like rate from prior week for comparison
+  likeRate:        number;
+  byCategory:      Record<string, number>;
+  byModel:         Record<string, { liked: number; total: number; rate: number }>;
+  topKeywords:     string[];
+  prevWeekRate:    number | null;
 }
 
 export async function computeWeeklyStats(): Promise<WeeklyStats> {
@@ -237,14 +238,36 @@ export async function computeWeeklyStats(): Promise<WeeklyStats> {
   const totalRuns  = rows.length;
   const totalIdeas = rows.reduce((sum, r) => sum + (r.ideas_json?.length ?? 0), 0);
 
-  // Collect liked ideas
-  const likedIdeas: { name: string; category?: string }[] = [];
+  // Collect liked ideas + track all ideas by model
+  const likedIdeas: { name: string; category?: string; model?: string }[] = [];
+  const byModel: Record<string, { liked: number; total: number; rate: number }> = {};
+
   for (const row of rows) {
     const indices: number[] = row.liked_ideas ?? [];
-    const ideas: { name: string; category?: string }[] = row.ideas_json ?? [];
-    for (const idx of indices) {
-      if (ideas[idx]) likedIdeas.push(ideas[idx]);
+    const ideas: { name: string; category?: string; model?: string }[] = row.ideas_json ?? [];
+
+    // Count totals per model
+    for (const idea of ideas) {
+      const m = idea.model ?? "unknown";
+      if (!byModel[m]) byModel[m] = { liked: 0, total: 0, rate: 0 };
+      byModel[m].total++;
     }
+
+    // Count likes per model
+    for (const idx of indices) {
+      if (ideas[idx]) {
+        likedIdeas.push(ideas[idx]);
+        const m = ideas[idx].model ?? "unknown";
+        if (!byModel[m]) byModel[m] = { liked: 0, total: 0, rate: 0 };
+        byModel[m].liked++;
+      }
+    }
+  }
+
+  // Compute like rate per model
+  for (const m of Object.keys(byModel)) {
+    const { liked, total } = byModel[m];
+    byModel[m].rate = total > 0 ? liked / total : 0;
   }
 
   // By category
@@ -281,6 +304,7 @@ export async function computeWeeklyStats(): Promise<WeeklyStats> {
     totalLiked: likedIdeas.length,
     likeRate: totalIdeas > 0 ? likedIdeas.length / totalIdeas : 0,
     byCategory,
+    byModel,
     topKeywords,
     prevWeekRate,
   };
