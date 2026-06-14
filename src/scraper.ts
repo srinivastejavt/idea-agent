@@ -982,12 +982,28 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
   const sourceSeen: Partial<Record<TrendPost["source"], number>> = {};
   const top: TrendPost[] = [];
 
+  // Crypto RSS feeds have 0 points/comments so they score near 0 and get crowded out.
+  // Guarantee at least 10 crypto posts in the top 50 so the LLM always sees crypto signals.
+  const CRYPTO_SOURCES = new Set<TrendPost["source"]>([
+    "coindesk", "cointelegraph", "decrypt", "theblock", "blockworks",
+    "bitcoinmagazine", "messari", "cryptoslate", "cryptobriefing",
+    "beincrypto", "bankless", "cryptonews",
+  ]);
+  const cryptoReserved = scored.filter(p => CRYPTO_SOURCES.has(p.source)).slice(0, 10);
+
   for (const post of scored) {
     const cap = SOURCE_CAPS[post.source] ?? 10;
     const seen = sourceSeen[post.source] ?? 0;
     if (seen >= cap) continue;
     sourceSeen[post.source] = seen + 1;
     top.push(post);
+    if (top.length >= 40) break;  // leave 10 slots for crypto
+  }
+
+  // Fill remaining slots with reserved crypto posts not already in top
+  const topUrls = new Set(top.map(p => p.url));
+  for (const post of cryptoReserved) {
+    if (!topUrls.has(post.url)) top.push(post);
     if (top.length >= 50) break;
   }
 

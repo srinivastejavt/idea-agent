@@ -32,13 +32,12 @@ export function formatDailyBrief(result: IdeaResult): string {
     if (catIdeas.length === 0) continue;
 
     const headlines = result.trendsByCategory[key];
-    const headlineStr = headlines.map(h => h.split(":")[0].trim().slice(0, 60)).join(" · ");
 
     const geminiIdeas   = catIdeas.filter(i => i.model?.includes("Gemini"));
     const deepseekIdeas = catIdeas.filter(i => i.model?.includes("DeepSeek"));
 
     lines.push("", `━━━ ${emoji} *${label}* ━━━`);
-    if (headlineStr) lines.push(`_${headlineStr}_`);
+    for (const h of headlines) lines.push(`_${h}_`);
 
     if (geminiIdeas.length > 0) {
       lines.push("", "🔵 _Gemini 2.5 Flash_");
