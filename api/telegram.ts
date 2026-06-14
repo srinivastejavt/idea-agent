@@ -2,14 +2,14 @@
  * Vercel Serverless Function — Telegram Webhook Proxy
  *
  * Telegram POSTs callback_query events here when a button is tapped.
- * We immediately return 200 (so Telegram doesn't retry), then forward
- * the payload to the Trigger.dev task for async processing.
+ * We await the Trigger.dev call before returning 200 — the API responds
+ * in ~200ms so Telegram won't timeout. (Previously used fire-and-forget
+ * with edge runtime, but edge functions terminate immediately after
+ * returning a response, killing the background fetch before it fires.)
  *
  * Required env vars (set in Vercel dashboard):
- *   TRIGGER_SECRET_KEY  — from Trigger.dev → API keys
+ *   TRIGGER_SECRET_KEY  — Secret key from Trigger.dev → project settings
  */
-
-export const config = { runtime: "edge" };
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") {
@@ -23,15 +23,24 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Bad request", { status: 400 });
   }
 
-  // Fire-and-forget to Trigger.dev — don't await so we return 200 fast
-  fetch("https://api.trigger.dev/api/v1/tasks/telegram-webhook/trigger", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.TRIGGER_SECRET_KEY}`,
-    },
-    body: JSON.stringify({ payload: { body } }),
-  }).catch((err) => console.error("[webhook-proxy] Trigger.dev call failed:", err));
+  try {
+    const res = await fetch("https://api.trigger.dev/api/v1/tasks/telegram-webhook/trigger", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.TRIGGER_SECRET_KEY}`,
+      },
+      body: JSON.stringify({ payload: { body } }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[webhook-proxy] Trigger.dev returned ${res.status}: ${text}`);
+    } else {
+      console.log(`[webhook-proxy] Trigger.dev task queued OK`);
+    }
+  } catch (err) {
+    console.error("[webhook-proxy] Trigger.dev call failed:", err);
+  }
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
