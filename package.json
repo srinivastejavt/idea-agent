@@ -16,6 +16,7 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.45.0",
     "@trigger.dev/sdk": "4.4.6",
+    "apify-client": "^2.23.4",
     "dotenv": "^16.0.0",
     "googleapis": "^144.0.0",
     "openai": "^4.0.0",

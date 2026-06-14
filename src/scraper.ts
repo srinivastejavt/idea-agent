@@ -21,7 +21,7 @@
  *   Bitcoin Mag    → RSS (Bitcoin-specific)
  *   Reddit crypto  → r/CryptoCurrency, r/ethereum, r/bitcoin, r/defi, r/web3, r/solana
  *
- * Phase 2 stubs: X/Twitter via Apify
+ * X/Twitter: Apify apidojo/tweet-scraper — set APIFY_API_TOKEN to enable
  */
 
 export interface TrendPost {
@@ -878,20 +878,104 @@ async function scrapeBluesky(): Promise<TrendPost[]> {
   return posts;
 }
 
-// ─── Phase 2 Stub: X/Twitter via Apify ──────────────────────────────────────
+// ─── X/Twitter via Apify (apidojo/tweet-scraper) ────────────────────────────
+
+/**
+ * High-signal thought leaders across AI, crypto, and indie building.
+ * These accounts post 6-12h before the same ideas surface on HN/Reddit.
+ * Update this list as the space evolves — quality over quantity.
+ */
+const TWITTER_HANDLES = [
+  // ── AI Leaders (3) ───────────────────────────────────────────────────────
+  "sama",           // OpenAI CEO — drives the biggest AI discourse
+  "DarioAmodei",    // Anthropic CEO — safety + capability framing
+  "karpathy",       // ex-OpenAI/Tesla — authoritative technical takes
+  // ── AI Practitioners (7) ─────────────────────────────────────────────────
+  "emollick",       // Wharton prof — best practical AI research commentary
+  "swyx",           // latent space — AI engineer community pulse
+  "simonw",         // LLM tools — "here's what this actually does" takes
+  "mattshumer_",    // AI product builder — fast takes on new capabilities
+  "AravSrinivas",   // Perplexity CEO — AI search + product strategy
+  "ClementDelangue",// HuggingFace CEO — open-source model releases
+  "alexalbert__",   // Anthropic — Claude updates, model behavior intel
+  // ── AI Critics (2) ───────────────────────────────────────────────────────
+  "GaryMarcus",     // loudest AI critic — pure contrarian tweet fuel
+  "ylecun",         // Meta AI — counternarrative to OpenAI hype
+  // ── Crypto News + Signal (7) ─────────────────────────────────────────────
+  "WuBlockchain",   // China/Asia crypto intel — earliest on exchange moves
+  "lookonchain",    // on-chain whale tracking — earliest signal on big moves
+  "laurashin",      // Unchained journalist — breaks scoops
+  "MessariCrypto",  // research-grade analysis, not just headlines
+  "DLNews_",        // high quality institutional crypto journalism
+  "CryptoHayes",    // BitMEX founder — macro/crypto cycles, sharp writing
+  "cobie",          // crypto culture — contrarian cycle takes
+  // ── Indie Builders (4) ───────────────────────────────────────────────────
+  "levelsio",       // ships fast, real revenue numbers, no fluff
+  "patio11",        // business of software — pricing, distribution
+  "marc_louvion",   // SaaS builder — growth experiments with real numbers
+  "natfriedman",    // ex-GitHub CEO — AI coding tools, sharp operator takes
+  // ── Podcasters / Idea Generators (4) ─────────────────────────────────────
+  "gregisenberg",   // AI product ideas, community-led growth — posts daily
+  "ShaanVP",        // My First Million — startup takes, what's blowing up
+  "jason",          // All-In / TWIST — startup culture, early stage signal
+  "danshipper",     // Every.to — AI x writing/productivity, thoughtful takes
+];
 
 async function scrapeTwitter(): Promise<TrendPost[]> {
-  // To enable:
-  // 1. Install: npm install apify-client
-  // 2. Set APIFY_API_TOKEN in .env
-  // 3. Actor: apidojo/tweet-scraper
-  // Input: {
-  //   searchTerms: ["#buildinpublic", "built a tool", "just launched", "10k users", "side project"],
-  //   maxItems: 50,
-  //   sort: "Latest"
-  // }
-  console.log("[scraper] Twitter/X: Phase 2 — set APIFY_API_TOKEN to enable");
-  return [];
+  const token = process.env.APIFY_API_TOKEN;
+  if (!token) {
+    console.log("[scraper] Twitter/X: skipping — APIFY_API_TOKEN not set");
+    return [];
+  }
+
+  try {
+    const { ApifyClient } = await import("apify-client");
+    const client = new ApifyClient({ token });
+
+    console.log(`[scraper] Twitter/X: scraping ${TWITTER_HANDLES.length} accounts via Apify`);
+
+    // Fetch tweets from the last 24h from curated accounts
+    const run = await client.actor("apidojo/tweet-scraper").call({
+      twitterHandles: TWITTER_HANDLES,
+      maxItems: 75,           // ~3 tweets per account across 25 handles
+      minimumFavorites: 50,   // filter out low-engagement noise
+      sort: "Latest",
+      addUserInfo: false,     // saves cost — we don't need profile data
+    });
+
+    const { items } = await client.dataset(run.defaultDatasetId).listItems();
+    console.log(`[scraper] Twitter/X: got ${items.length} tweets`);
+
+    const posts: TrendPost[] = [];
+    for (const tweet of items as Record<string, unknown>[]) {
+      const text = (tweet.text ?? tweet.full_text ?? "") as string;
+      if (!text || text.length < 30) continue;
+
+      // Skip pure retweets (RT @...) — only original takes
+      if (text.startsWith("RT @")) continue;
+
+      const likes    = (tweet.favoriteCount ?? tweet.like_count ?? 0) as number;
+      const retweets = (tweet.retweetCount  ?? tweet.retweet_count ?? 0) as number;
+      const replies  = (tweet.replyCount    ?? tweet.reply_count ?? 0) as number;
+      const author   = (tweet.author?.userName ?? tweet.user?.screen_name ?? "unknown") as string;
+      const tweetId  = (tweet.id ?? tweet.id_str ?? "") as string;
+      const createdAt = (tweet.createdAt ?? tweet.created_at ?? new Date().toISOString()) as string;
+
+      posts.push({
+        title: text.slice(0, 200).replace(/\n+/g, " "),
+        url: `https://x.com/${author}/status/${tweetId}`,
+        points: likes + retweets * 2,   // retweets carry more signal than likes
+        comments: replies,
+        source: "twitter" as const,
+        createdAt,
+      });
+    }
+
+    return posts;
+  } catch (err) {
+    console.error("[scraper] Twitter/X error:", err);
+    return [];
+  }
 }
 
 // ─── Deduplication ───────────────────────────────────────────────────────────
