@@ -4,12 +4,17 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 import type { IdeaResult } from "./prompt";
 import type { TrendPost } from "./scraper";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
+  process.env.SUPABASE_SERVICE_KEY!,
+  {
+    auth: { persistSession: false },
+    realtime: { transport: ws },
+  }
 );
 
 export interface StoredIdea {
