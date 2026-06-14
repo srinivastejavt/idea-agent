@@ -200,6 +200,27 @@ Generate 9 tool ideas — 3 per trend above. Each idea must inherit the category
   return (ideas ?? []).map((idea: Idea) => ({ ...idea, model: modelLabel }));
 }
 
+// ─── Post-process: keyword-based category correction ─────────────────────────
+// LLMs sometimes mislabel trend categories (e.g. "Amazon AI regulation" → "other"
+// instead of "ai"). This corrects individual ideas using keyword matching on their
+// name + description — same logic as sheets.ts, no extra LLM call needed.
+
+const AI_KW = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neural|transformer|diffusion|agent|model|inference|RAG|fine.?tun|embedding|hallucin|regul.*AI|AI.*regul)\b/i;
+const CRYPTO_KW = /\b(crypto|bitcoin|ethereum|blockchain|DeFi|NFT|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|RWA|DAO|L2|layer 2|memecoin|BTC|ETH|IPO.*coin|coin.*IPO|SpaceX.*BTC|BTC.*SpaceX)\b/i;
+
+function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
+  // Build a map: ideaIndex (0-based within each trend group of 3) → trend category
+  // Since each model generates 3 ideas per trend (9 total = 3 trends × 3 ideas),
+  // we use the idea's own text to override if it clearly belongs to a different bucket.
+  return ideas.map(idea => {
+    const text = `${idea.name} ${idea.description}`;
+    if (CRYPTO_KW.test(text)) return { ...idea, category: "crypto" as const };
+    if (AI_KW.test(text))     return { ...idea, category: "ai" as const };
+    // If the idea has no strong keyword signal, trust what the LLM assigned
+    return idea;
+  });
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export interface PreviousRun {
@@ -244,8 +265,11 @@ export async function generateDailyIdeas(
     }
   }
 
-  const topPick = allIdeas[0]
-    ? `${allIdeas[0].name} — top pick from ${allIdeas[0].model}`
+  // Keyword-correct any ideas the LLM miscategorized
+  const correctedIdeas = recategorize(allIdeas, trends);
+
+  const topPick = correctedIdeas[0]
+    ? `${correctedIdeas[0].name} — top pick from ${correctedIdeas[0].model}`
     : "N/A";
 
   // Return primary trend for storage
@@ -259,7 +283,7 @@ export async function generateDailyIdeas(
     trend: trends.map(t => t.trend).join(" | "),
     mechanic: primary.mechanic,
     trendSource: primary.trendSource,
-    ideas: allIdeas,
+    ideas: correctedIdeas,
     topPick,
     sources: trends
       .filter(t => t.sourceUrl && t.sourceTitle)
