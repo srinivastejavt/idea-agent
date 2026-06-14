@@ -33,8 +33,8 @@ const FEEDS: { name: string; url: string; type: "podcast" | "youtube" }[] = [
   { name: "Y Combinator",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCcefcZRL2oaA_uBNeo5UNqg", type: "youtube" },
   { name: "Fireship",         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA", type: "youtube" },
   { name: "Andrej Karpathy",  url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXUPKJO5MZQN11PqgIvyuvQ", type: "youtube" },
-  { name: "Greg Isenberg",    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCOqBx5bPSW1VTRgI1I3a9DA", type: "youtube" },
-  { name: "a16z",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC9cn0TuPq4dnbTY-CBsm8sg", type: "youtube" },
+  { name: "Greg Isenberg",    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCPjNBjflYl0-HQtUvOx0Ibw", type: "youtube" },
+  { name: "a16z",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC9cn0TuPq4dnbTY-CBsm8XA", type: "youtube" },
 ];
 
 // ─── RSS parser (handles both RSS 2.0 and Atom/YouTube format) ───────────────
