@@ -56,16 +56,9 @@ async function runIdeaGeneration(runLabel: string) {
   // 6. Send to Telegram
   const messageId = await sendDailyBrief(result, stored.id);
 
-  // 7. Update Supabase with Telegram message ID
-  const { createClient } = await import("@supabase/supabase-js");
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-  );
-  await supabase
-    .from("ideas")
-    .update({ telegram_message_id: messageId })
-    .eq("id", stored.id);
+  // 7. Update Supabase with Telegram message ID (reuse supabase module)
+  const { updateTelegramMessageId } = await import("../supabase");
+  await updateTelegramMessageId(stored.id, messageId);
 
   console.log(`[daily-ideas] Done. Saved ${stored.id}, Telegram msg ${messageId}`);
   return { success: true, ideaId: stored.id, messageId };

@@ -106,6 +106,16 @@ export async function getTodaysRuns(): Promise<PreviousRun[]> {
   }));
 }
 
+// ─── Update Telegram message ID ──────────────────────────────────────────────
+
+export async function updateTelegramMessageId(id: string, messageId: number): Promise<void> {
+  const { error } = await supabase
+    .from("ideas")
+    .update({ telegram_message_id: messageId })
+    .eq("id", id);
+  if (error) throw new Error(`Supabase update telegram_message_id failed: ${error.message}`);
+}
+
 // ─── Get by Telegram message ID (for callback routing) ───────────────────────
 
 export async function getByTelegramMessageId(
