@@ -12,7 +12,7 @@
 import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas } from "../prompt";
-import { saveIdeas, updateFeedback, getTodaysRuns, getRecentLikedIdeas } from "../supabase";
+import { saveIdeas, updateFeedback, saveLikedIdea, getTodaysRuns, getRecentLikedIdeas } from "../supabase";
 import { sendDailyBrief, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 
@@ -101,10 +101,17 @@ export async function handleTelegramWebhook(body: any): Promise<void> {
   if (!query) return;
 
   try {
-    const { ideaId, liked } = parseCallback(query);
-    await updateFeedback(ideaId, liked);
-    await answerCallback(query.id, liked ? "Noted 🙌" : "Fair enough 👍");
-    console.log(`[webhook] Feedback recorded: ${ideaId} → liked=${liked}`);
+    const parsed = parseCallback(query);
+
+    if (parsed.type === "like_idea") {
+      await saveLikedIdea(parsed.ideaId, parsed.ideaIndex);
+      await answerCallback(query.id, `⭐ Saved idea #${parsed.ideaIndex + 1}`);
+      console.log(`[webhook] Liked idea ${parsed.ideaIndex + 1} for ${parsed.ideaId}`);
+    } else {
+      await updateFeedback(parsed.ideaId, false);
+      await answerCallback(query.id, "Fair enough 👍");
+      console.log(`[webhook] Skipped batch: ${parsed.ideaId}`);
+    }
   } catch (err) {
     console.error("[webhook] Failed to process callback:", err);
     await answerCallback(query.id, "Something went wrong");

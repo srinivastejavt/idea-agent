@@ -29,6 +29,7 @@ export interface Idea {
   description: string;
   weekendBuild: boolean;
   model?: string;
+  category?: "ai" | "crypto" | "other";
 }
 
 export interface IdeaResult {
@@ -38,6 +39,11 @@ export interface IdeaResult {
   ideas: Idea[];
   topPick: string;
   sources: { title: string; url: string }[];
+  trendsByCategory: {
+    ai: string[];
+    crypto: string[];
+    other: string[];
+  };
 }
 
 // ─── Voice reference ──────────────────────────────────────────────────────────
@@ -87,6 +93,7 @@ interface TrendSignal {
   mechanic: string;
   rawMechanic: "leaderboard" | "roast" | "weird_data_combo" | "relatable_truth" | "other";
   trendSource: string;
+  category: "ai" | "crypto" | "other";
   sourceUrl?: string;
   sourceTitle?: string;
 }
@@ -119,7 +126,7 @@ Respond ONLY with valid JSON. No markdown, no explanation.`,
       },
       {
         role: "user",
-        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}`,
+        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt", "category": "ai if about AI/ML/LLMs, crypto if about blockchain/crypto/DeFi/web3, other for everything else", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}`,
       },
     ],
   });
@@ -175,12 +182,12 @@ ${run.ideas.map((i, n) => `  ${n + 1}. ${i.name} — ${i.description}`).join("\n
       {
         role: "user",
         content: `Today's top 3 trends (freshly scraped):
-${trends.map((t, i) => `${i + 1}. ${t.trend} [mechanic: ${t.rawMechanic}]`).join("\n")}
+${trends.map((t, i) => `${i + 1}. [${(t.category ?? "other").toUpperCase()}] ${t.trend} [mechanic: ${t.rawMechanic}]`).join("\n")}
 ${likedBlock}${previousBlock}
-Generate 9 tool ideas — 3 per trend above. Each must be directly tied to its trend. Be specific — name actual companies, APIs, metrics. Return JSON:
+Generate 9 tool ideas — 3 per trend above. Each idea must inherit the category of its trend (ai/crypto/other). Return JSON:
 {
   "ideas": [
-    {"name": "tool name (2-4 words)", "description": "one sentence, punchy and specific", "weekendBuild": true/false},
+    {"name": "tool name (2-4 words)", "description": "one punchy sentence, max 80 chars", "weekendBuild": true/false, "category": "ai|crypto|other"},
     ...9 items total
   ]
 }`,
@@ -242,7 +249,12 @@ export async function generateDailyIdeas(
     : "N/A";
 
   // Return primary trend for storage
-  const primary = trends[0] ?? { trend: "", mechanic: "", trendSource: "", rawMechanic: "other" };
+  const primary = trends[0] ?? { trend: "", mechanic: "", trendSource: "", rawMechanic: "other", category: "other" as const };
+  const trendsByCategory = {
+    ai:     trends.filter(t => t.category === "ai").map(t => t.trend),
+    crypto: trends.filter(t => t.category === "crypto").map(t => t.trend),
+    other:  trends.filter(t => !t.category || t.category === "other").map(t => t.trend),
+  };
   return {
     trend: trends.map(t => t.trend).join(" | "),
     mechanic: primary.mechanic,
@@ -252,6 +264,7 @@ export async function generateDailyIdeas(
     sources: trends
       .filter(t => t.sourceUrl && t.sourceTitle)
       .map(t => ({ title: t.sourceTitle!, url: t.sourceUrl! })),
+    trendsByCategory,
   };
 }
 

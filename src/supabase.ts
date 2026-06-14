@@ -26,6 +26,7 @@ export interface StoredIdea {
   ideas_json: IdeaResult["ideas"];
   top_pick: string;
   liked: boolean | null;
+  liked_ideas: number[] | null;
   telegram_message_id: number | null;
 }
 
@@ -109,6 +110,28 @@ export async function getTodaysRuns(): Promise<PreviousRun[]> {
       description: idea.description,
     })),
   }));
+}
+
+// ─── Save per-idea feedback ───────────────────────────────────────────────────
+
+export async function saveLikedIdea(id: string, ideaIndex: number): Promise<void> {
+  // Fetch current liked_ideas array, then append if not already present
+  const { data } = await supabase
+    .from("ideas")
+    .select("liked_ideas")
+    .eq("id", id)
+    .single();
+
+  const current: number[] = data?.liked_ideas ?? [];
+  if (current.includes(ideaIndex)) return; // already saved
+
+  const { error } = await supabase
+    .from("ideas")
+    .update({ liked_ideas: [...current, ideaIndex] })
+    .eq("id", id);
+
+  if (error) throw new Error(`Supabase saveLikedIdea failed: ${error.message}`);
+  console.log(`[supabase] Saved liked idea index ${ideaIndex} for ${id}`);
 }
 
 // ─── Update Telegram message ID ──────────────────────────────────────────────

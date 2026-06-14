@@ -1,9 +1,9 @@
 /**
  * Telegram Delivery Module
- * Sends the daily brief and handles thumbs up/down feedback callbacks
+ * Sends the daily brief and handles per-idea feedback callbacks
  */
 
-import type { IdeaResult } from "./prompt";
+import type { IdeaResult, Idea } from "./prompt";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
@@ -11,39 +11,79 @@ const BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 // ─── Format message ───────────────────────────────────────────────────────────
 
-export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
-  // Group by model so the brief is readable
-  const geminiIdeas  = result.ideas.filter(i => i.model?.includes("Gemini"));
-  const deepseekIdeas = result.ideas.filter(i => i.model?.includes("DeepSeek"));
-  const otherIdeas   = result.ideas.filter(i => !i.model?.includes("Gemini") && !i.model?.includes("DeepSeek"));
-  const allGrouped   = [...geminiIdeas, ...deepseekIdeas, ...otherIdeas];
+export function formatDailyBrief(result: IdeaResult): string {
+  const date = new Date().toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
 
-  const ideasText = allGrouped
-    .map(
-      (idea, i) =>
-        `${i + 1}. *${idea.name}* — ${idea.description} [${idea.weekendBuild ? "🟢 weekend" : "🔴 bigger lift"}]`
-    )
-    .join("\n");
+  const lines: string[] = [`📅 *${date} — Idea Brief*`];
 
-  const modelLine = `🤖 _Gemini 2.5 Flash (1-${geminiIdeas.length}) · DeepSeek V4 Flash (${geminiIdeas.length + 1}-${geminiIdeas.length + deepseekIdeas.length})_`;
+  const categories: Array<{ key: "ai" | "crypto" | "other"; emoji: string; label: string }> = [
+    { key: "ai",     emoji: "🤖", label: "AI"     },
+    { key: "crypto", emoji: "₿",  label: "CRYPTO"  },
+    { key: "other",  emoji: "🌐", label: "OTHER"   },
+  ];
 
-  const sourcesText = result.sources?.length
-    ? [``, `📰 *SOURCES:*`, ...result.sources.map(s => `• [${s.title.slice(0, 60)}](${s.url})`)]
-    : [];
+  // Number ideas globally so buttons match
+  let globalIdx = 1;
 
-  return [
-    `🔥 *TREND:* ${result.trend}`,
-    ``,
-    `🧠 *PATTERN:* ${result.mechanic}`,
-    ``,
-    `💡 *IDEAS FOR TODAY:*`,
-    modelLine,
-    ``,
-    ideasText,
-    ``,
-    `⚡ *TOP PICK:* ${result.topPick}`,
-    ...sourcesText,
-  ].join("\n");
+  for (const { key, emoji, label } of categories) {
+    const catIdeas = result.ideas.filter(i => (i.category ?? "other") === key);
+    if (catIdeas.length === 0) continue;
+
+    const headlines = result.trendsByCategory[key];
+    const headlineStr = headlines.map(h => h.split(":")[0].trim().slice(0, 60)).join(" · ");
+
+    const geminiIdeas   = catIdeas.filter(i => i.model?.includes("Gemini"));
+    const deepseekIdeas = catIdeas.filter(i => i.model?.includes("DeepSeek"));
+
+    lines.push("", `━━━ ${emoji} *${label}* ━━━`);
+    if (headlineStr) lines.push(`_${headlineStr}_`);
+
+    if (geminiIdeas.length > 0) {
+      lines.push("", "🔵 _Gemini 2.5 Flash_");
+      for (const idea of geminiIdeas) {
+        lines.push(`${globalIdx++}\\. *${idea.name}* ${idea.weekendBuild ? "🟢" : "🔴"} — ${idea.description}`);
+      }
+    }
+    if (deepseekIdeas.length > 0) {
+      lines.push("", "🟠 _DeepSeek V4 Flash_");
+      for (const idea of deepseekIdeas) {
+        lines.push(`${globalIdx++}\\. *${idea.name}* ${idea.weekendBuild ? "🟢" : "🔴"} — ${idea.description}`);
+      }
+    }
+  }
+
+  lines.push("", "─────────────────");
+  lines.push(`⚡ *TOP PICK:* ${result.topPick}`);
+
+  if (result.sources?.length) {
+    lines.push("", "📰 *Sources*");
+    for (const s of result.sources) {
+      lines.push(`• [${s.title.slice(0, 55)}](${s.url})`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ─── Build per-idea feedback keyboard ────────────────────────────────────────
+
+function buildIdeaButtons(totalIdeas: number, ideaId: string) {
+  const rows: { text: string; callback_data: string }[][] = [];
+  const ROW_SIZE = 6;
+
+  for (let i = 0; i < totalIdeas; i += ROW_SIZE) {
+    rows.push(
+      Array.from({ length: Math.min(ROW_SIZE, totalIdeas - i) }, (_, j) => ({
+        text: String(i + j + 1),
+        callback_data: `like_idea:${ideaId}:${i + j}`,
+      }))
+    );
+  }
+  rows.push([{ text: "❌ None of these", callback_data: `skip:${ideaId}` }]);
+
+  return { inline_keyboard: rows };
 }
 
 // ─── Send message ─────────────────────────────────────────────────────────────
@@ -55,10 +95,7 @@ function chunkText(text: string): string[] {
   const chunks: string[] = [];
   let remaining = text;
   while (remaining.length > 0) {
-    if (remaining.length <= MAX_TG_LENGTH) {
-      chunks.push(remaining);
-      break;
-    }
+    if (remaining.length <= MAX_TG_LENGTH) { chunks.push(remaining); break; }
     let splitAt = remaining.lastIndexOf("\n", MAX_TG_LENGTH);
     if (splitAt === -1) splitAt = MAX_TG_LENGTH;
     chunks.push(remaining.slice(0, splitAt));
@@ -67,64 +104,61 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
+async function sendMessage(
+  text: string,
+  options: Record<string, unknown> = {}
+): Promise<number> {
+  const res = await fetch(`${BASE_URL}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "Markdown", ...options }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(`Telegram sendMessage failed: ${JSON.stringify(data)}`);
+  return data.result.message_id;
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string
 ): Promise<number> {
-  const text = formatDailyBrief(result, ideaId);
+  const text = formatDailyBrief(result);
   const chunks = chunkText(text);
-
-  const reply_markup = {
-    inline_keyboard: [
-      [
-        { text: "✅ Liked today's batch", callback_data: `like:${ideaId}` },
-        { text: "❌ Wasn't feeling it", callback_data: `skip:${ideaId}` },
-      ],
-    ],
-  };
 
   let lastMessageId = 0;
   for (let i = 0; i < chunks.length; i++) {
-    const isLast = i === chunks.length - 1;
-    const body: Record<string, unknown> = {
-      chat_id: CHAT_ID,
-      text: chunks[i],
-      parse_mode: "Markdown",
-    };
-    if (isLast) body.reply_markup = reply_markup;
-
-    const res = await fetch(`${BASE_URL}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    const data = await res.json();
-    if (!data.ok) throw new Error(`Telegram sendMessage failed: ${JSON.stringify(data)}`);
-
-    lastMessageId = data.result.message_id;
+    lastMessageId = await sendMessage(chunks[i]);
     console.log(`[telegram] Message chunk ${i + 1}/${chunks.length} sent: ${lastMessageId}`);
   }
+
+  // Send separate per-idea feedback message
+  const feedbackMsg = await sendMessage(
+    `💬 *Which ideas resonated?*\nTap the numbers to save them:`,
+    { reply_markup: buildIdeaButtons(result.ideas.length, ideaId) }
+  );
+  console.log(`[telegram] Feedback buttons sent: ${feedbackMsg}`);
 
   return lastMessageId;
 }
 
 // ─── Callback webhook handler ─────────────────────────────────────────────────
-// Wire this up as an HTTP handler in Trigger.dev or a standalone Express route
-// Telegram will POST to your webhook URL when the user taps a button
 
 export interface TelegramCallbackQuery {
   id: string;
-  data: string; // "like:<uuid>" or "skip:<uuid>"
+  data: string;
   message: { message_id: number };
 }
 
-export function parseCallback(query: TelegramCallbackQuery): {
-  ideaId: string;
-  liked: boolean;
-} {
-  const [action, ideaId] = query.data.split(":");
-  return { ideaId, liked: action === "like" };
+export type ParsedCallback =
+  | { type: "like_idea"; ideaId: string; ideaIndex: number }
+  | { type: "skip"; ideaId: string };
+
+export function parseCallback(query: TelegramCallbackQuery): ParsedCallback {
+  const parts = query.data.split(":");
+  if (parts[0] === "like_idea") {
+    return { type: "like_idea", ideaId: parts[1], ideaIndex: parseInt(parts[2], 10) };
+  }
+  return { type: "skip", ideaId: parts[1] };
 }
 
 export async function answerCallback(callbackQueryId: string, text: string): Promise<void> {
@@ -136,7 +170,6 @@ export async function answerCallback(callbackQueryId: string, text: string): Pro
 }
 
 // ─── Register webhook ─────────────────────────────────────────────────────────
-// Run this ONCE to point Telegram at your webhook URL
 
 export async function registerWebhook(webhookUrl: string): Promise<void> {
   const res = await fetch(`${BASE_URL}/setWebhook`, {
