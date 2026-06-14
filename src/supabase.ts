@@ -28,6 +28,8 @@ export interface StoredIdea {
   liked: boolean | null;
   liked_ideas: number[] | null;
   telegram_message_id: number | null;
+  media_recs_json: { show: string; title: string; url: string; type: string }[] | null;
+  liked_media: number[] | null;
 }
 
 // ─── Save today's ideas ───────────────────────────────────────────────────────
@@ -133,6 +135,61 @@ export async function saveLikedIdea(id: string, ideaIndex: number): Promise<void
 
   if (error) throw new Error(`Supabase saveLikedIdea failed: ${error.message}`);
   console.log(`[supabase] Saved liked idea index ${ideaIndex} for ${id}`);
+}
+
+// ─── Save media recs for the run ─────────────────────────────────────────────
+
+export async function saveMediaRecs(
+  id: string,
+  recs: { show: string; title: string; url: string; type: string }[]
+): Promise<void> {
+  const { error } = await supabase
+    .from("ideas")
+    .update({ media_recs_json: recs })
+    .eq("id", id);
+  if (error) throw new Error(`Supabase saveMediaRecs failed: ${error.message}`);
+}
+
+// ─── Save liked media index ───────────────────────────────────────────────────
+
+export async function saveLikedMedia(id: string, mediaIndex: number): Promise<void> {
+  const { data } = await supabase
+    .from("ideas")
+    .select("liked_media")
+    .eq("id", id)
+    .single();
+
+  const current: number[] = data?.liked_media ?? [];
+  if (current.includes(mediaIndex)) return;
+
+  const { error } = await supabase
+    .from("ideas")
+    .update({ liked_media: [...current, mediaIndex] })
+    .eq("id", id);
+
+  if (error) throw new Error(`Supabase saveLikedMedia failed: ${error.message}`);
+  console.log(`[supabase] Saved liked media index ${mediaIndex} for ${id}`);
+}
+
+// ─── Get recent liked media (for future rec bias) ────────────────────────────
+
+export async function getRecentLikedMedia(limit = 10): Promise<{ show: string; title: string }[]> {
+  const { data, error } = await supabase
+    .from("ideas")
+    .select("media_recs_json, liked_media")
+    .not("liked_media", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) return [];
+
+  return (data ?? []).flatMap(r => {
+    const indices: number[] = r.liked_media ?? [];
+    const recs: { show: string; title: string }[] = r.media_recs_json ?? [];
+    return indices
+      .filter(i => i >= 0 && i < recs.length)
+      .map(i => ({ show: recs[i].show, title: recs[i].title }));
+  });
 }
 
 // ─── Update Telegram message ID ──────────────────────────────────────────────

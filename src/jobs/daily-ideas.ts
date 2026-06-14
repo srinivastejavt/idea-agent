@@ -12,7 +12,7 @@
 import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas, pickMediaRecs } from "../prompt";
-import { saveIdeas, updateFeedback, saveLikedIdea, getTodaysRuns, getRecentLikedIdeas } from "../supabase";
+import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia } from "../supabase";
 import { sendDailyBrief, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 import { fetchRecentMedia } from "../media";
@@ -56,19 +56,24 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false) {
   // 5. Save to Supabase
   const stored = await saveIdeas(result, topTrends);
 
-  // 6. Fetch media recs in parallel if this is the evening run
+  // 6. Fetch media recs if this is the evening run
   const mediaRecs = includeMedia
-    ? await fetchRecentMedia()
-        .then(items => pickMediaRecs(result.trend, items))
+    ? await Promise.all([fetchRecentMedia(), getRecentLikedMedia()])
+        .then(([items, liked]) => pickMediaRecs(result.trend, items, liked.map(l => l.show)))
         .catch(err => { console.error("[daily-ideas] media recs failed (non-fatal):", err.message); return []; })
     : [];
 
   // 7. Send to Telegram
   const messageId = await sendDailyBrief(result, stored.id, mediaRecs);
 
-  // 8. Update Supabase with Telegram message ID (reuse supabase module)
+  // 8. Update Supabase with Telegram message ID + save media recs
   const { updateTelegramMessageId } = await import("../supabase");
   await updateTelegramMessageId(stored.id, messageId);
+  if (mediaRecs.length) {
+    await saveMediaRecs(stored.id, mediaRecs).catch(err =>
+      console.error("[daily-ideas] saveMediaRecs failed (non-fatal):", err.message)
+    );
+  }
 
   console.log(`[daily-ideas] Done. Saved ${stored.id}, Telegram msg ${messageId}`);
   return { success: true, ideaId: stored.id, messageId };
@@ -117,6 +122,10 @@ export async function handleTelegramWebhook(body: any): Promise<void> {
       await saveLikedIdea(parsed.ideaId, parsed.ideaIndex);
       await answerCallback(query.id, `⭐ Saved idea #${parsed.ideaIndex + 1}`);
       console.log(`[webhook] Liked idea ${parsed.ideaIndex + 1} for ${parsed.ideaId}`);
+    } else if (parsed.type === "like_media") {
+      await saveLikedMedia(parsed.ideaId, parsed.mediaIndex);
+      await answerCallback(query.id, "❤️ Saved — will recommend this show more");
+      console.log(`[webhook] Liked media ${parsed.mediaIndex} for ${parsed.ideaId}`);
     } else {
       await updateFeedback(parsed.ideaId, false);
       await answerCallback(query.id, "Fair enough 👍");

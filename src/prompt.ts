@@ -372,18 +372,23 @@ export async function generateDailyIdeas(
 
 export async function pickMediaRecs(
   trendSummary: string,
-  media: import("./media").MediaItem[]
+  media: import("./media").MediaItem[],
+  likedShows: string[] = []
 ): Promise<MediaRec[]> {
   if (!media.length) return [];
 
   const catalogue = media
-    .slice(0, 60) // cap to avoid token bloat
+    .slice(0, 60)
     .map((m, i) => `${i + 1}. [${m.type === "youtube" ? "YT" : "POD"}] ${m.show} — "${m.title}"`)
     .join("\n");
 
+  const likedBlock = likedShows.length
+    ? `\nShows Srini has liked before (prioritise these if relevant): ${[...new Set(likedShows)].join(", ")}\n`
+    : "";
+
   const prompt = `Today's trending topics in AI/crypto/startups:
 ${trendSummary}
-
+${likedBlock}
 Recent episodes/videos available:
 ${catalogue}
 

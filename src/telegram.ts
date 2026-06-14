@@ -131,6 +131,20 @@ export function formatMediaRecs(recs: MediaRec[]): string {
   return lines.join("\n").trim();
 }
 
+function buildMediaButtons(recs: MediaRec[], ideaId: string) {
+  const ROW_SIZE = 3;
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < recs.length; i += ROW_SIZE) {
+    rows.push(
+      recs.slice(i, i + ROW_SIZE).map((rec, j) => ({
+        text: `❤️ ${rec.show}`,
+        callback_data: `like_media:${ideaId}:${i + j}`,
+      }))
+    );
+  }
+  return { inline_keyboard: rows };
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string,
@@ -152,9 +166,11 @@ export async function sendDailyBrief(
   );
   console.log(`[telegram] Feedback buttons sent: ${feedbackMsg}`);
 
-  // Send media recs as a separate message (evening run only)
+  // Send media recs as a separate message with like buttons (evening run only)
   if (mediaRecs?.length) {
-    await sendMessage(formatMediaRecs(mediaRecs));
+    await sendMessage(formatMediaRecs(mediaRecs), {
+      reply_markup: buildMediaButtons(mediaRecs, ideaId),
+    });
     console.log(`[telegram] Media recs sent: ${mediaRecs.length} picks`);
   }
 
@@ -170,14 +186,14 @@ export interface TelegramCallbackQuery {
 }
 
 export type ParsedCallback =
-  | { type: "like_idea"; ideaId: string; ideaIndex: number }
-  | { type: "skip"; ideaId: string };
+  | { type: "like_idea";  ideaId: string; ideaIndex: number }
+  | { type: "like_media"; ideaId: string; mediaIndex: number }
+  | { type: "skip";       ideaId: string };
 
 export function parseCallback(query: TelegramCallbackQuery): ParsedCallback {
   const parts = query.data.split(":");
-  if (parts[0] === "like_idea") {
-    return { type: "like_idea", ideaId: parts[1], ideaIndex: parseInt(parts[2], 10) };
-  }
+  if (parts[0] === "like_idea")  return { type: "like_idea",  ideaId: parts[1], ideaIndex:  parseInt(parts[2], 10) };
+  if (parts[0] === "like_media") return { type: "like_media", ideaId: parts[1], mediaIndex: parseInt(parts[2], 10) };
   return { type: "skip", ideaId: parts[1] };
 }
 
