@@ -1,18 +1,18 @@
 /**
  * Prompt Engine — Dual model
- * 1. Extract trend with Gemini 2.5 Flash (thinking mode, best analysis)
- * 2. Generate 5 ideas each with Gemini 2.5 Flash + Llama 4 Maverick in parallel → 10 total
- * Combined cost: ~$0.003/run (~$0.09/month)
+ * 1. Extract trend with Gemini 3 Flash Preview (near-Pro reasoning, best analysis)
+ * 2. Generate 9 ideas each with Gemini 2.5 Flash + DeepSeek V4 Flash in parallel → 18 total
+ * Combined cost: ~$0.007/run (~$0.63/month)
  */
 
 import "dotenv/config";
 import OpenAI from "openai";
 import type { TrendPost } from "./scraper";
 
-const TREND_MODEL = "google/gemini-2.5-flash";   // $0.002/run — thinking mode for analysis
+const TREND_MODEL = "google/gemini-3-flash-preview"; // near-Pro reasoning for trend analysis
 const IDEA_MODELS = [
   { id: "google/gemini-2.5-flash",        label: "Gemini 2.5 Flash" },
-  { id: "meta-llama/llama-4-maverick",    label: "Llama 4 Maverick" },
+  { id: "deepseek/deepseek-v4-flash",     label: "DeepSeek V4 Flash" },
 ];
 
 const client = new OpenAI({

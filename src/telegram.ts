@@ -13,10 +13,10 @@ const BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
   // Group by model so the brief is readable
-  const geminiIdeas = result.ideas.filter(i => i.model?.includes("Gemini"));
-  const llamaIdeas  = result.ideas.filter(i => i.model?.includes("Llama"));
-  const otherIdeas  = result.ideas.filter(i => !i.model?.includes("Gemini") && !i.model?.includes("Llama"));
-  const allGrouped  = [...geminiIdeas, ...llamaIdeas, ...otherIdeas];
+  const geminiIdeas  = result.ideas.filter(i => i.model?.includes("Gemini"));
+  const deepseekIdeas = result.ideas.filter(i => i.model?.includes("DeepSeek"));
+  const otherIdeas   = result.ideas.filter(i => !i.model?.includes("Gemini") && !i.model?.includes("DeepSeek"));
+  const allGrouped   = [...geminiIdeas, ...deepseekIdeas, ...otherIdeas];
 
   const ideasText = allGrouped
     .map(
@@ -25,7 +25,7 @@ export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
     )
     .join("\n");
 
-  const modelLine = `🤖 _Gemini 2.5 Flash (1-${geminiIdeas.length}) · Llama 4 Maverick (${geminiIdeas.length + 1}-${geminiIdeas.length + llamaIdeas.length})_`;
+  const modelLine = `🤖 _Gemini 2.5 Flash (1-${geminiIdeas.length}) · DeepSeek V4 Flash (${geminiIdeas.length + 1}-${geminiIdeas.length + deepseekIdeas.length})_`;
 
   const sourcesText = result.sources?.length
     ? [``, `📰 *SOURCES:*`, ...result.sources.map(s => `• [${s.title.slice(0, 60)}](${s.url})`)]
