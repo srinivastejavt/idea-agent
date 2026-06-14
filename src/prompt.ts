@@ -209,14 +209,15 @@ const AI_KW = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neu
 const CRYPTO_KW = /\b(crypto|bitcoin|ethereum|blockchain|DeFi|NFT|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|RWA|DAO|L2|layer 2|memecoin|BTC|ETH|IPO.*coin|coin.*IPO|SpaceX.*BTC|BTC.*SpaceX)\b/i;
 
 function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
-  // Build a map: ideaIndex (0-based within each trend group of 3) → trend category
-  // Since each model generates 3 ideas per trend (9 total = 3 trends × 3 ideas),
-  // we use the idea's own text to override if it clearly belongs to a different bucket.
+  // Only promote ideas the LLM tagged "other" into ai/crypto if keywords match.
+  // Never override ideas already tagged "ai" or "crypto" — that was pulling
+  // nostalgia-tech/other ideas into AI/crypto just from passing keyword mentions,
+  // causing the OTHER section to disappear entirely.
   return ideas.map(idea => {
+    if (idea.category !== "other") return idea; // trust LLM-assigned ai/crypto
     const text = `${idea.name} ${idea.description}`;
     if (CRYPTO_KW.test(text)) return { ...idea, category: "crypto" as const };
     if (AI_KW.test(text))     return { ...idea, category: "ai" as const };
-    // If the idea has no strong keyword signal, trust what the LLM assigned
     return idea;
   });
 }
