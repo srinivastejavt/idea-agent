@@ -43,13 +43,32 @@ export function formatDailyBrief(result: IdeaResult, ideaId: string): string {
 
 // ─── Send message ─────────────────────────────────────────────────────────────
 
+const MAX_TG_LENGTH = 4096;
+
+function chunkText(text: string): string[] {
+  if (text.length <= MAX_TG_LENGTH) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= MAX_TG_LENGTH) {
+      chunks.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf("\n", MAX_TG_LENGTH);
+    if (splitAt === -1) splitAt = MAX_TG_LENGTH;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  return chunks;
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string
 ): Promise<number> {
   const text = formatDailyBrief(result, ideaId);
+  const chunks = chunkText(text);
 
-  // Inline keyboard: thumbs up/down, keyed by the Supabase row ID
   const reply_markup = {
     inline_keyboard: [
       [
@@ -59,23 +78,30 @@ export async function sendDailyBrief(
     ],
   };
 
-  const res = await fetch(`${BASE_URL}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  let lastMessageId = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    const body: Record<string, unknown> = {
       chat_id: CHAT_ID,
-      text,
+      text: chunks[i],
       parse_mode: "Markdown",
-      reply_markup,
-    }),
-  });
+    };
+    if (isLast) body.reply_markup = reply_markup;
 
-  const data = await res.json();
-  if (!data.ok) throw new Error(`Telegram sendMessage failed: ${JSON.stringify(data)}`);
+    const res = await fetch(`${BASE_URL}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-  const messageId: number = data.result.message_id;
-  console.log(`[telegram] Message sent: ${messageId}`);
-  return messageId;
+    const data = await res.json();
+    if (!data.ok) throw new Error(`Telegram sendMessage failed: ${JSON.stringify(data)}`);
+
+    lastMessageId = data.result.message_id;
+    console.log(`[telegram] Message chunk ${i + 1}/${chunks.length} sent: ${lastMessageId}`);
+  }
+
+  return lastMessageId;
 }
 
 // ─── Callback webhook handler ─────────────────────────────────────────────────
