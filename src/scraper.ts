@@ -909,10 +909,10 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
   try {
     console.log(`[scraper] Twitter/X: searching for builder/AI content via data-slayer/twitter-search`);
 
-    // Two keyword searches to cover indie builder + AI content
+    // Two keyword searches — latest section for freshness
     const [builderResult, aiResult] = await Promise.allSettled([
-      apifyRun("data-slayer~twitter-search", { query: "launched side project built tool startup", section: "top", maxPages: 1 }),
-      apifyRun("data-slayer~twitter-search", { query: "AI LLM Claude OpenAI agents model release", section: "top", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: "launched side project built tool startup", section: "latest", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: "AI LLM Claude OpenAI agents model release", section: "latest", maxPages: 1 }),
     ]);
 
     const allItems = [
@@ -934,11 +934,14 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
       if (!tweetId || seen.has(tweetId)) continue;
       seen.add(tweetId);
 
+      const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
+      // Only last 12 hours
+      if (Date.now() - new Date(createdAt).getTime() > 12 * 60 * 60 * 1000) continue;
+
       const likes    = (tweet.favorites ?? 0) as number;
       const retweets = (tweet.retweets ?? 0) as number;
       const replies  = (tweet.replies  ?? 0) as number;
       const author   = (tweet.screen_name ?? "unknown") as string;
-      const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
 
       posts.push({
         title: text.slice(0, 200).replace(/\n+/g, " "),
@@ -959,64 +962,85 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
 }
 
 // ─── X/Twitter — Category Trending Search ───────────────────────────────────
-// Separate Apify call using searchTerms (not handles) to find what's actually
-// blowing up on X right now in each category — surfaces anyone, not just our list.
+// Strategy:
+//   1. Fetch X's actual trending topics right now (US)
+//   2. Match any trend to AI / crypto / security
+//   3. For matched categories: search tweets on that specific trending topic
+//   4. For unmatched categories: fall back to broad keyword search
+//   5. In all cases: filter to last 6 hours, pick highest-engagement tweet
 
 const AI_KW_SCRAPER       = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neural|agents?|model release|inference|fine.?tun|RAG|copilot|Sora|Grok)\b/i;
 const CRYPTO_KW_SCRAPER   = /\b(bitcoin|ethereum|crypto|DeFi|NFT|blockchain|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|BTC|ETH|memecoin|DAO)\b/i;
 const SECURITY_KW_SCRAPER = /\b(cybersecurity|breach|hack|ransomware|malware|phishing|vulnerability|CVE|exploit|zero.?day|CISA|data leak|infosec|password|credential)\b/i;
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+function parseTrendingTweets(items: Record<string, unknown>[]): TrendingPost[] {
+  const posts: TrendingPost[] = [];
+  for (const tweet of items) {
+    const text = (tweet.text ?? "") as string;
+    if (!text || text.length < 20 || text.startsWith("RT @")) continue;
+    const tweetId = (tweet.tweet_id ?? "") as string;
+    if (!tweetId) continue;
+    const createdAt = (tweet.created_at ?? "") as string;
+    if (createdAt && Date.now() - new Date(createdAt).getTime() > SIX_HOURS_MS) continue;
+
+    const likes    = (tweet.favorites ?? 0) as number;
+    const retweets = (tweet.retweets  ?? 0) as number;
+    const replies  = (tweet.replies   ?? 0) as number;
+    const viewsStr = (tweet.views ?? "") as string;
+    const views    = viewsStr ? (parseInt(viewsStr, 10) || undefined) : undefined;
+    const author   = (tweet.screen_name ?? "unknown") as string;
+
+    posts.push({
+      title: text.slice(0, 280).replace(/\n+/g, " "),
+      url: `https://x.com/${author}/status/${tweetId}`,
+      points: likes + retweets * 2,
+      comments: replies,
+      source: "twitter" as const,
+      createdAt,
+      author,
+      likes,
+      views,
+    });
+  }
+  return posts;
+}
 
 async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCategory"]> {
   const token = process.env.APIFY_API_TOKEN;
   if (!token) return {};
 
   try {
-    console.log("[scraper] Twitter trending: searching by category via data-slayer/twitter-search...");
+    // Step 1: Get X's actual trending topics right now
+    const trendsRaw = await apifyRun("data-slayer~twitter-trends-by-location", { country: "UnitedStates" });
+    const trendNames = trendsRaw.map(t => (t.name ?? "") as string).filter(Boolean);
+    console.log(`[scraper] X trending now: ${trendNames.slice(0, 8).join(", ")}`);
 
-    // 3 parallel searches — one per category (actor takes one query at a time)
+    // Step 2: Match any trending topic to our categories
+    const aiTrend       = trendNames.find(t => AI_KW_SCRAPER.test(t));
+    const cryptoTrend   = trendNames.find(t => CRYPTO_KW_SCRAPER.test(t));
+    const securityTrend = trendNames.find(t => SECURITY_KW_SCRAPER.test(t));
+
+    // Step 3: Build queries — use real trend if matched, else fall back to keywords
+    const aiQuery       = aiTrend       ?? "AI LLM OpenAI Claude Anthropic model agents";
+    const cryptoQuery   = cryptoTrend   ?? "bitcoin ethereum crypto DeFi blockchain web3";
+    const securityQuery = securityTrend ?? "cybersecurity breach hack vulnerability CVE infosec";
+
+    console.log(`[scraper] Twitter trending queries — AI: "${aiQuery}", crypto: "${cryptoQuery}", security: "${securityQuery}"`);
+
+    // Step 4: Fetch latest tweets for each query in parallel
     const [aiResult, cryptoResult, securityResult] = await Promise.allSettled([
-      apifyRun("data-slayer~twitter-search", { query: "AI LLM OpenAI Claude Anthropic Gemini model agents", section: "top", maxPages: 1 }),
-      apifyRun("data-slayer~twitter-search", { query: "bitcoin ethereum crypto DeFi blockchain web3 solana", section: "top", maxPages: 1 }),
-      apifyRun("data-slayer~twitter-search", { query: "cybersecurity breach hack vulnerability CVE infosec", section: "top", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: aiQuery,       section: "latest", maxPages: 2 }),
+      apifyRun("data-slayer~twitter-search", { query: cryptoQuery,   section: "latest", maxPages: 2 }),
+      apifyRun("data-slayer~twitter-search", { query: securityQuery, section: "latest", maxPages: 2 }),
     ]);
 
-    const processItems = (items: Record<string, unknown>[]): TrendingPost[] => {
-      const posts: TrendingPost[] = [];
-      for (const tweet of items) {
-        const text = (tweet.text ?? "") as string;
-        if (!text || text.length < 20 || text.startsWith("RT @")) continue;
+    const aiPosts       = aiResult.status === "fulfilled"       ? parseTrendingTweets(aiResult.value)       : [];
+    const cryptoPosts   = cryptoResult.status === "fulfilled"   ? parseTrendingTweets(cryptoResult.value)   : [];
+    const securityPosts = securityResult.status === "fulfilled" ? parseTrendingTweets(securityResult.value) : [];
 
-        const likes    = (tweet.favorites ?? 0) as number;
-        const retweets = (tweet.retweets  ?? 0) as number;
-        const replies  = (tweet.replies   ?? 0) as number;
-        const viewsStr = (tweet.views ?? "") as string;
-        const views    = viewsStr ? (parseInt(viewsStr, 10) || undefined) : undefined;
-        const author   = (tweet.screen_name ?? "unknown") as string;
-        const tweetId  = (tweet.tweet_id ?? "") as string;
-        const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
-
-        if (!tweetId) continue;
-
-        posts.push({
-          title: text.slice(0, 280).replace(/\n+/g, " "),
-          url: `https://x.com/${author}/status/${tweetId}`,
-          points: likes + retweets * 2,
-          comments: replies,
-          source: "twitter" as const,
-          createdAt,
-          author,
-          likes,
-          views,
-        });
-      }
-      return posts;
-    };
-
-    const aiPosts       = aiResult.status === "fulfilled"       ? processItems(aiResult.value)       : [];
-    const cryptoPosts   = cryptoResult.status === "fulfilled"   ? processItems(cryptoResult.value)   : [];
-    const securityPosts = securityResult.status === "fulfilled" ? processItems(securityResult.value) : [];
-
-    console.log(`[scraper] Twitter trending: ${aiPosts.length} AI, ${cryptoPosts.length} crypto, ${securityPosts.length} security posts`);
+    console.log(`[scraper] Twitter trending: ${aiPosts.length} AI, ${cryptoPosts.length} crypto, ${securityPosts.length} security posts (last 6h)`);
 
     const top = (arr: TrendingPost[]) => arr.sort((a, b) => b.points - a.points)[0];
 
