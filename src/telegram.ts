@@ -55,22 +55,35 @@ export function formatDailyBrief(result: IdeaResult): string {
     }
   }
 
-  if (result.tweetIdeas?.length) {
-    lines.push("", "─────────────────");
-    lines.push("🐦 *TWEET ANGLES*");
-    lines.push("_Pick one, take it to Claude chat, make it yours_");
-    for (const { trend, angles, sourceUrl } of result.tweetIdeas) {
-      const trendLine = sourceUrl
-        ? `📌 [${trend}](${sourceUrl})`
-        : `📌 _${trend}_`;
-      lines.push("", trendLine);
-      for (const angle of angles) {
-        lines.push(`• ${angle}`);
-      }
+  return lines.join("\n");
+}
+
+// ─── Format + send tweet angles as standalone message ─────────────────────────
+
+export function formatTweetAngles(tweetIdeas: IdeaResult["tweetIdeas"]): string {
+  if (!tweetIdeas?.length) return "";
+  const lines = [
+    "🐦 *TWEET ANGLES*",
+    "_Pick one → open Claude chat → make it yours_",
+  ];
+  for (const { trend, angles, sourceUrl } of tweetIdeas) {
+    const trendLine = sourceUrl
+      ? `\n📌 [${trend}](${sourceUrl})`
+      : `\n📌 _${trend}_`;
+    lines.push(trendLine);
+    for (const angle of angles) {
+      lines.push(`• ${angle}`);
     }
   }
-
   return lines.join("\n");
+}
+
+export async function sendTweetAngles(tweetIdeas: IdeaResult["tweetIdeas"]): Promise<void> {
+  if (!tweetIdeas?.length) return;
+  const text = formatTweetAngles(tweetIdeas);
+  if (!text) return;
+  await sendMessage(text);
+  console.log(`[telegram] Tweet angles sent: ${tweetIdeas.length} trends`);
 }
 
 // ─── Format trending X section ───────────────────────────────────────────────

@@ -13,7 +13,7 @@ import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas, pickMediaRecs } from "../prompt";
 import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia, computeWeeklyStats } from "../supabase";
-import { sendDailyBrief, sendTrendingOnX, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
+import { sendDailyBrief, sendTrendingOnX, sendTweetAngles, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 import { fetchRecentMedia } from "../media";
 
@@ -70,8 +70,13 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false, include
     );
   }
 
-  // 7b. Send ideas brief + feedback buttons (completely separate message)
+  // 7b. Send ideas brief + feedback buttons
   const messageId = await sendDailyBrief(result, stored.id, mediaRecs);
+
+  // 7c. Send tweet angles as its own standalone message
+  await sendTweetAngles(result.tweetIdeas).catch(err =>
+    console.error("[daily-ideas] sendTweetAngles failed (non-fatal):", err.message)
+  );
 
   // 8. Update Supabase with Telegram message ID + save media recs
   const { updateTelegramMessageId } = await import("../supabase");

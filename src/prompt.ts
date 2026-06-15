@@ -130,7 +130,11 @@ async function extractTrends(posts: TrendPost[]): Promise<TrendSignal[]> {
         role: "system",
         content: `You are a trend analyst who understands virality mechanics in tech/startup/crypto Twitter and Reddit.
 
-Your job: identify the TOP 3 distinct trends driving engagement today. Each must be a genuinely different story or theme — not variations of the same topic.
+Your job: identify the TOP 3 distinct trends driving engagement today.
+
+STEP 1 — MERGE DUPLICATES FIRST: Before picking trends, group all posts about the same underlying story together. If 5 posts all discuss "OpenAI's new model", that's ONE trend, not five. Use the most signal-rich version to represent the group.
+
+STEP 2 — PICK 3 DISTINCT TRENDS: Each must be a genuinely different story or news event — not variations of the same topic. Prefer trends with the most cross-source confirmation (same story on Twitter + HN + Reddit = stronger signal).
 
 Virality mechanics:
 - leaderboard: ranks people, companies, or things against each other
