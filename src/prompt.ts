@@ -29,12 +29,13 @@ export interface Idea {
   description: string;
   weekendBuild: boolean;
   model?: string;
-  category?: "ai" | "crypto" | "other";
+  category?: "ai" | "crypto" | "security" | "other";
 }
 
 export interface TweetIdea {
   trend: string;        // the headline trend
   angles: string[];     // 3 angles/hooks to post about
+  sourceUrl?: string;   // original X/tweet/post URL that sparked the trend
 }
 
 export interface MediaRec {
@@ -55,6 +56,7 @@ export interface IdeaResult {
   trendsByCategory: {
     ai: string[];
     crypto: string[];
+    security: string[];
     other: string[];
   };
   tweetIdeas: TweetIdea[];
@@ -107,7 +109,7 @@ interface TrendSignal {
   mechanic: string;
   rawMechanic: "leaderboard" | "roast" | "weird_data_combo" | "relatable_truth" | "other";
   trendSource: string;
-  category: "ai" | "crypto" | "other";
+  category: "ai" | "crypto" | "security" | "other";
   sourceUrl?: string;
   sourceTitle?: string;
 }
@@ -140,7 +142,7 @@ Respond ONLY with valid JSON. No markdown, no explanation.`,
       },
       {
         role: "user",
-        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt|coindesk|cointelegraph|dlnews|wublockchain|coingeckonews|rwaxyz|blockworks|theblock|decrypt", "category": "ai if about AI/ML/LLMs, crypto if about blockchain/crypto/DeFi/web3/RWA/stablecoins, other for everything else", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}\n\nIMPORTANT: If any posts come from crypto sources (coindesk, cointelegraph, decrypt, theblock, blockworks, dlnews, wublockchain, coingeckonews, rwaxyz, beincrypto, bankless, cryptonews), you MUST include at least 1 crypto trend. Crypto RSS feeds show 0 points/comments by design — low scores do NOT mean low importance for that community.`,
+        content: `Today's top trending posts:\n\n${postsText}\n\nReturn JSON:\n{"trends": [{"trend": "one sentence: what blew up and why", "mechanic": "one sentence: the pattern", "rawMechanic": "leaderboard|roast|weird_data_combo|relatable_truth|other", "trendSource": "hackernews|reddit|twitter|producthunt|coindesk|cointelegraph|dlnews|wublockchain|coingeckonews|rwaxyz|blockworks|theblock|decrypt", "category": "ai if about AI/ML/LLMs, crypto if about blockchain/crypto/DeFi/web3/RWA/stablecoins, security if about cybersecurity/hacking/data breaches/vulnerabilities/infosec, other for everything else", "postIndex": <1-based index of the post that best represents this trend>}, ...3 items total]}\n\nIMPORTANT: If any posts come from crypto sources (coindesk, cointelegraph, decrypt, theblock, blockworks, dlnews, wublockchain, coingeckonews, rwaxyz, beincrypto, bankless, cryptonews), you MUST include at least 1 crypto trend. Crypto RSS feeds show 0 points/comments by design — low scores do NOT mean low importance for that community.`,
       },
     ],
   });
@@ -198,7 +200,7 @@ ${run.ideas.map((i, n) => `  ${n + 1}. ${i.name} — ${i.description}`).join("\n
         content: `Today's top 3 trends (freshly scraped):
 ${trends.map((t, i) => `${i + 1}. [${(t.category ?? "other").toUpperCase()}] ${t.trend} [mechanic: ${t.rawMechanic}]`).join("\n")}
 ${likedBlock}${previousBlock}
-Generate 9 tool ideas — 3 per trend above. Each idea must inherit the category of its trend (ai/crypto/other). Return JSON:
+Generate 9 tool ideas — 3 per trend above. Each idea must inherit the category of its trend (ai/crypto/security/other). Return JSON:
 {
   "ideas": [
     {"name": "tool name (2-4 words)", "description": "one punchy sentence, max 80 chars", "weekendBuild": true/false, "category": "ai|crypto|other"},
@@ -221,17 +223,17 @@ Generate 9 tool ideas — 3 per trend above. Each idea must inherit the category
 
 const AI_KW = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neural|transformer|diffusion|agent|model|inference|RAG|fine.?tun|embedding|hallucin|regul.*AI|AI.*regul)\b/i;
 const CRYPTO_KW = /\b(crypto|bitcoin|ethereum|blockchain|DeFi|NFT|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|RWA|DAO|L2|layer 2|memecoin|BTC|ETH|IPO.*coin|coin.*IPO|SpaceX.*BTC|BTC.*SpaceX)\b/i;
+const SECURITY_KW = /\b(cybersecurity|infosec|breach|hack|ransomware|malware|phishing|vulnerability|CVE|exploit|zero.?day|CISA|firewall|endpoint|threat|SIEM|SOC|pentest|penetration|encryption|password|credential|leak|spyware|botnet|DDoS)\b/i;
 
 function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
-  // Only promote ideas the LLM tagged "other" into ai/crypto if keywords match.
-  // Never override ideas already tagged "ai" or "crypto" — that was pulling
-  // nostalgia-tech/other ideas into AI/crypto just from passing keyword mentions,
-  // causing the OTHER section to disappear entirely.
+  // Only promote ideas the LLM tagged "other" into ai/crypto/security if keywords match.
+  // Never override ideas already tagged — that was pulling other ideas into wrong categories.
   return ideas.map(idea => {
-    if (idea.category !== "other") return idea; // trust LLM-assigned ai/crypto
+    if (idea.category !== "other") return idea; // trust LLM-assigned categories
     const text = `${idea.name} ${idea.description}`;
-    if (CRYPTO_KW.test(text)) return { ...idea, category: "crypto" as const };
-    if (AI_KW.test(text))     return { ...idea, category: "ai" as const };
+    if (SECURITY_KW.test(text)) return { ...idea, category: "security" as const };
+    if (CRYPTO_KW.test(text))   return { ...idea, category: "crypto" as const };
+    if (AI_KW.test(text))       return { ...idea, category: "ai" as const };
     return idea;
   });
 }
@@ -243,34 +245,39 @@ function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
 async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
   const response = await client.chat.completions.create({
     model: "deepseek/deepseek-v4-flash", // cheap + fast, no need for heavy reasoning
-    max_tokens: 1000,
+    max_tokens: 1200,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
-        content: `You help a solo tech founder find non-obvious angles on tech/crypto/startup news to tweet about.
+        content: `You help a solo tech founder find non-obvious angles on tech/crypto/startup/security news to tweet about.
 
-This founder thinks like this:
-- Always asks "who actually benefits from this narrative?" before forming a take
-- Looks for the gap between what's being said publicly and what's actually happening
-- Calls out hypocrisy when incentives don't match rhetoric
-- Finds the angle that builders/founders care about — not what journalists care about
-- Never states the obvious. If everyone already knows it, it's not worth posting.
-- Prefers specific and uncomfortable over vague and safe
+This founder writes like this (Hamming + @itsreallyvivek style):
+- Asks the uncomfortable question nobody else is asking out loud
+- Names specific companies, people, products — NOT categories ("OpenAI", not "AI labs")
+- Exposes the "quiet reason" — the real incentive behind the move most people don't say
+- Surfaces the gap between what's said publicly and what's actually happening
+- Calls out hypocrisy when incentives don't match rhetoric, with receipts
+- Never states the obvious — if everyone already knows it, it's not worth posting
+- Prefers "Most people think X. The actual pattern is Y." framing
 
-For each trend, give 3 angles with distinct lenses:
-1. INCENTIVE lens — who benefits, who's being misled, what's the real motive
-2. CONTRARIAN lens — the "actually..." take, what everyone is getting wrong
-3. BUILDER lens — what this means specifically for solo founders / indie builders
+For each trend, give 3 angles with DISTINCT lenses:
+1. INCENTIVE lens — who specifically benefits, who's being misled, what's the real motive ("The quiet reason [Company] is doing [X] is [Y]")
+2. CONTRARIAN lens — the "actually..." take, what everyone is getting wrong about this
+3. BUILDER lens — what this means specifically for solo founders to DO this week, not just to think about
 
-Each angle = one punchy sentence. A hook the founder can develop into a tweet. NOT a draft, NOT an essay.
+Rules:
+- Each angle = one punchy sentence, max 120 chars
+- Name specific entities (companies, people, products) where possible
+- Hook should make someone stop scrolling
+- NOT a draft tweet — just the angle/hook to develop
 
 Respond ONLY with valid JSON. No markdown.`,
       },
       {
         role: "user",
         content: `Today's trends:
-${trends.map((t, i) => `${i + 1}. ${t.trend}`).join("\n")}
+${trends.map((t, i) => `${i + 1}. [${(t.category ?? "other").toUpperCase()}] ${t.trend}`).join("\n")}
 
 For each trend, give 3 distinct tweet angles. Return JSON:
 {
@@ -286,7 +293,13 @@ For each trend, give 3 distinct tweet angles. Return JSON:
 
   const text = stripFences(response.choices[0].message.content ?? "{}");
   const { tweetIdeas } = JSON.parse(text);
-  return (tweetIdeas ?? []) as TweetIdea[];
+  const ideas = (tweetIdeas ?? []) as TweetIdea[];
+
+  // Attach source URLs from the corresponding trend (Twitter posts → direct link to the viral tweet)
+  return ideas.map((idea, i) => ({
+    ...idea,
+    sourceUrl: trends[i]?.sourceUrl,
+  }));
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -348,9 +361,10 @@ export async function generateDailyIdeas(
   // Return primary trend for storage
   const primary = trends[0] ?? { trend: "", mechanic: "", trendSource: "", rawMechanic: "other", category: "other" as const };
   const trendsByCategory = {
-    ai:     trends.filter(t => t.category === "ai").map(t => t.trend),
-    crypto: trends.filter(t => t.category === "crypto").map(t => t.trend),
-    other:  trends.filter(t => !t.category || t.category === "other").map(t => t.trend),
+    ai:       trends.filter(t => t.category === "ai").map(t => t.trend),
+    crypto:   trends.filter(t => t.category === "crypto").map(t => t.trend),
+    security: trends.filter(t => t.category === "security").map(t => t.trend),
+    other:    trends.filter(t => !t.category || t.category === "other").map(t => t.trend),
   };
   console.log(`[prompt] Tweet angles: ${tweetIdeas.length} trends covered`);
 

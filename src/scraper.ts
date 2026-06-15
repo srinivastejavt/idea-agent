@@ -236,6 +236,8 @@ const SUBREDDITS = [
   "entrepreneur", "SideProject", "indiehackers", "buildinpublic",
   // Tech
   "programming", "webdev", "MachineLearning", "artificial",
+  // Security / Cybersecurity
+  "netsec", "cybersecurity",
   // Crypto / Web3
   "CryptoCurrency", "ethereum", "bitcoin", "defi", "web3", "solana",
   // Other
@@ -886,9 +888,10 @@ async function scrapeBluesky(): Promise<TrendPost[]> {
  * Update this list as the space evolves — quality over quantity.
  */
 const TWITTER_HANDLES = [
-  // ── AI Leaders (3) ───────────────────────────────────────────────────────
+  // ── AI Leaders (4) ───────────────────────────────────────────────────────
   "sama",           // OpenAI CEO — drives the biggest AI discourse
   "DarioAmodei",    // Anthropic CEO — safety + capability framing
+  "satyanadella",   // Microsoft CEO — enterprise AI + product direction
   "karpathy",       // ex-OpenAI/Tesla — authoritative technical takes
   // ── AI Practitioners (7) ─────────────────────────────────────────────────
   "emollick",       // Wharton prof — best practical AI research commentary
@@ -909,6 +912,10 @@ const TWITTER_HANDLES = [
   "DLNews_",        // high quality institutional crypto journalism
   "CryptoHayes",    // BitMEX founder — macro/crypto cycles, sharp writing
   "cobie",          // crypto culture — contrarian cycle takes
+  // ── Security / Cybersecurity (3) ─────────────────────────────────────────
+  "briankrebs",     // KrebsOnSecurity — breaks the biggest breaches
+  "troyhunt",       // HaveIBeenPwned — data breach + infosec authority
+  "SwiftOnSecurity",// practical security takes — massive following
   // ── Indie Builders (4) ───────────────────────────────────────────────────
   "levelsio",       // ships fast, real revenue numbers, no fluff
   "patio11",        // business of software — pricing, distribution
@@ -937,7 +944,7 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
     // Fetch tweets from the last 24h from curated accounts
     const run = await client.actor("apidojo/tweet-scraper").call({
       twitterHandles: TWITTER_HANDLES,
-      maxItems: 75,           // ~3 tweets per account across 25 handles
+      maxItems: 100,          // ~3 tweets per account across 31 handles
       minimumFavorites: 50,   // filter out low-engagement noise
       sort: "Latest",
       addUserInfo: false,     // saves cost — we don't need profile data

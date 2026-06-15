@@ -18,10 +18,11 @@ export function formatDailyBrief(result: IdeaResult): string {
 
   const lines: string[] = [`📅 *${date} — Idea Brief*`];
 
-  const categories: Array<{ key: "ai" | "crypto" | "other"; emoji: string; label: string }> = [
-    { key: "ai",     emoji: "🤖", label: "AI"     },
-    { key: "crypto", emoji: "₿",  label: "CRYPTO"  },
-    { key: "other",  emoji: "🌐", label: "OTHER"   },
+  const categories: Array<{ key: "ai" | "crypto" | "security" | "other"; emoji: string; label: string }> = [
+    { key: "ai",       emoji: "🤖", label: "AI"       },
+    { key: "crypto",   emoji: "₿",  label: "CRYPTO"   },
+    { key: "security", emoji: "🔐", label: "SECURITY" },
+    { key: "other",    emoji: "🌐", label: "OTHER"    },
   ];
 
   // Number ideas globally so buttons match
@@ -57,8 +58,11 @@ export function formatDailyBrief(result: IdeaResult): string {
     lines.push("", "─────────────────");
     lines.push("🐦 *TWEET ANGLES*");
     lines.push("_Pick one, take it to Claude chat, make it yours_");
-    for (const { trend, angles } of result.tweetIdeas) {
-      lines.push("", `📌 _${trend}_`);
+    for (const { trend, angles, sourceUrl } of result.tweetIdeas) {
+      const trendLine = sourceUrl
+        ? `📌 [${trend}](${sourceUrl})`
+        : `📌 _${trend}_`;
+      lines.push("", trendLine);
       for (const angle of angles) {
         lines.push(`• ${angle}`);
       }
