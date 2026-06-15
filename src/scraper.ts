@@ -1159,7 +1159,7 @@ export interface FetchTrendsResult {
   };
 }
 
-export async function fetchTrends(): Promise<FetchTrendsResult> {
+export async function fetchTrends(includeTrending = false): Promise<FetchTrendsResult> {
   console.log("[scraper] Fetching trends from all sources...");
 
   const [hn, reddit, yc, ph, tc, lobsters, hf, devto, github, ih, bsky, twitter,
@@ -1195,7 +1195,7 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
       scrapeWuBlockchain(),
       scrapeCoinGeckoNews(),
       scrapeRwaXyz(),
-      scrapeTwitterTrending(),   // category search — runs in parallel, costs ~45 tweets
+      includeTrending ? scrapeTwitterTrending() : Promise.resolve({}),
     ]);
 
   const raw: TrendPost[] = [

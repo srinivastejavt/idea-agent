@@ -19,11 +19,11 @@ import { fetchRecentMedia } from "../media";
 
 // ─── Shared run logic (used by all 3 cron tasks) ─────────────────────────────
 
-async function runIdeaGeneration(runLabel: string, includeMedia = false) {
+async function runIdeaGeneration(runLabel: string, includeMedia = false, includeTrending = false) {
   console.log(`[daily-ideas] ${runLabel} run starting...`);
 
-  // 1. Scrape trends + trending X posts per category (runs in parallel inside fetchTrends)
-  const { all: allTrends, top: topTrends, trendingByCategory } = await fetchTrends();
+  // 1. Scrape trends (+ trending X category search on morning run only — saves ~$1/month)
+  const { all: allTrends, top: topTrends, trendingByCategory } = await fetchTrends(includeTrending);
   if (allTrends.length === 0) {
     console.error("[daily-ideas] No trends found — aborting");
     return { success: false, reason: "no trends" };
@@ -89,7 +89,8 @@ export const morningRun = schedules.task({
     await cleanupOldTabs().catch(err =>
       console.error("[daily-ideas] Tab cleanup failed (non-fatal):", err.message)
     );
-    return runIdeaGeneration("Morning (8am IST)");
+    // includeTrending=true: category X search runs once/day here (saves ~$1.08/month vs 3×/day)
+    return runIdeaGeneration("Morning (8am IST)", false, true);
   },
 });
 
@@ -98,7 +99,7 @@ export const morningRun = schedules.task({
 export const eveningRun = schedules.task({
   id: "idea-generator-evening",
   cron: "30 12 * * *",  // 6:00pm IST — EU full day + US pre-market buzz
-  run: () => runIdeaGeneration("Evening (6pm IST)", true), // true = include media recs
+  run: () => runIdeaGeneration("Evening (6pm IST)", true, false), // media recs only
 });
 
 // ─── Run 3: 11:00pm IST (5:30pm UTC) ─────────────────────────────────────────
@@ -106,7 +107,7 @@ export const eveningRun = schedules.task({
 export const nightRun = schedules.task({
   id: "idea-generator-night",
   cron: "30 17 * * *",  // 11:00pm IST — US morning/afternoon peak (best run)
-  run: () => runIdeaGeneration("Night (11pm IST)"),
+  run: () => runIdeaGeneration("Night (11pm IST)", false, false),
 });
 
 // ─── Weekly quality digest — every Monday 8am IST (2:30am UTC) ───────────────
