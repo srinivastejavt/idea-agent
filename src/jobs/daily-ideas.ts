@@ -13,7 +13,7 @@ import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas, pickMediaRecs } from "../prompt";
 import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia, computeWeeklyStats } from "../supabase";
-import { sendDailyBrief, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
+import { sendDailyBrief, sendTrendingOnX, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 import { fetchRecentMedia } from "../media";
 
@@ -63,8 +63,15 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false, include
         .catch(err => { console.error("[daily-ideas] media recs failed (non-fatal):", err.message); return []; })
     : [];
 
-  // 7. Send to Telegram (trending X section included on all runs)
-  const messageId = await sendDailyBrief(result, stored.id, mediaRecs, trendingByCategory);
+  // 7a. Send trending X as its own standalone message first (if this run includes it)
+  if (includeTrending && (trendingByCategory.ai || trendingByCategory.crypto || trendingByCategory.security)) {
+    await sendTrendingOnX(trendingByCategory).catch(err =>
+      console.error("[daily-ideas] sendTrendingOnX failed (non-fatal):", err.message)
+    );
+  }
+
+  // 7b. Send ideas brief + feedback buttons (completely separate message)
+  const messageId = await sendDailyBrief(result, stored.id, mediaRecs);
 
   // 8. Update Supabase with Telegram message ID + save media recs
   const { updateTelegramMessageId } = await import("../supabase");

@@ -177,11 +177,22 @@ function buildMediaButtons(recs: MediaRec[], ideaId: string) {
   return { inline_keyboard: rows };
 }
 
+// ─── Send trending X as a standalone message (called independently) ───────────
+
+export async function sendTrendingOnX(
+  trending: { ai?: TrendingPost; crypto?: TrendingPost; security?: TrendingPost }
+): Promise<void> {
+  if (!trending.ai && !trending.crypto && !trending.security) return;
+  const text = formatTrendingOnX(trending);
+  if (!text) return;
+  await sendMessage(text);
+  console.log("[telegram] Trending on X sent as standalone message");
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string,
-  mediaRecs?: MediaRec[],
-  trending?: { ai?: TrendingPost; crypto?: TrendingPost; security?: TrendingPost }
+  mediaRecs?: MediaRec[]
 ): Promise<number> {
   const text = formatDailyBrief(result);
   const chunks = chunkText(text);
@@ -190,15 +201,6 @@ export async function sendDailyBrief(
   for (let i = 0; i < chunks.length; i++) {
     lastMessageId = await sendMessage(chunks[i]);
     console.log(`[telegram] Message chunk ${i + 1}/${chunks.length} sent: ${lastMessageId}`);
-  }
-
-  // Send "What's Hot on X" — top viral post per category with link
-  if (trending && (trending.ai || trending.crypto || trending.security)) {
-    const trendingText = formatTrendingOnX(trending);
-    if (trendingText) {
-      await sendMessage(trendingText);
-      console.log("[telegram] Trending on X section sent");
-    }
   }
 
   // Send separate per-idea feedback message
