@@ -935,8 +935,8 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
       seen.add(tweetId);
 
       const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
-      // Only last 12 hours
-      if (Date.now() - new Date(createdAt).getTime() > 12 * 60 * 60 * 1000) continue;
+      // Only last 24 hours
+      if (Date.now() - new Date(createdAt).getTime() > 24 * 60 * 60 * 1000) continue;
 
       const likes    = (tweet.favorites ?? 0) as number;
       const retweets = (tweet.retweets ?? 0) as number;
@@ -973,7 +973,7 @@ const AI_KW_SCRAPER       = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machin
 const CRYPTO_KW_SCRAPER   = /\b(bitcoin|ethereum|crypto|DeFi|NFT|blockchain|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|BTC|ETH|memecoin|DAO)\b/i;
 const SECURITY_KW_SCRAPER = /\b(cybersecurity|breach|hack|ransomware|malware|phishing|vulnerability|CVE|exploit|zero.?day|CISA|data leak|infosec|password|credential)\b/i;
 
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const SIX_HOURS_MS = 24 * 60 * 60 * 1000; // 24h window — "latest" section is already sorted by recency
 
 function parseTrendingTweets(items: Record<string, unknown>[]): TrendingPost[] {
   const posts: TrendingPost[] = [];
