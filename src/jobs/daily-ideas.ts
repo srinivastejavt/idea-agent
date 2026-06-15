@@ -22,8 +22,8 @@ import { fetchRecentMedia } from "../media";
 async function runIdeaGeneration(runLabel: string, includeMedia = false) {
   console.log(`[daily-ideas] ${runLabel} run starting...`);
 
-  // 1. Scrape trends
-  const { all: allTrends, top: topTrends } = await fetchTrends();
+  // 1. Scrape trends + trending X posts per category (runs in parallel inside fetchTrends)
+  const { all: allTrends, top: topTrends, trendingByCategory } = await fetchTrends();
   if (allTrends.length === 0) {
     console.error("[daily-ideas] No trends found — aborting");
     return { success: false, reason: "no trends" };
@@ -63,8 +63,8 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false) {
         .catch(err => { console.error("[daily-ideas] media recs failed (non-fatal):", err.message); return []; })
     : [];
 
-  // 7. Send to Telegram
-  const messageId = await sendDailyBrief(result, stored.id, mediaRecs);
+  // 7. Send to Telegram (trending X section included on all runs)
+  const messageId = await sendDailyBrief(result, stored.id, mediaRecs, trendingByCategory);
 
   // 8. Update Supabase with Telegram message ID + save media recs
   const { updateTelegramMessageId } = await import("../supabase");

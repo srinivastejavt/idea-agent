@@ -944,7 +944,7 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
     // Fetch tweets from the last 24h from curated accounts
     const run = await client.actor("apidojo/tweet-scraper").call({
       twitterHandles: TWITTER_HANDLES,
-      maxItems: 100,          // ~3 tweets per account across 31 handles
+      maxItems: 60,           // ~2 tweets per account across 31 handles (budget freed for category search)
       minimumFavorites: 50,   // filter out low-engagement noise
       sort: "Latest",
       addUserInfo: false,     // saves cost — we don't need profile data
@@ -982,6 +982,85 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
   } catch (err) {
     console.error("[scraper] Twitter/X error:", err);
     return [];
+  }
+}
+
+// ─── X/Twitter — Category Trending Search ───────────────────────────────────
+// Separate Apify call using searchTerms (not handles) to find what's actually
+// blowing up on X right now in each category — surfaces anyone, not just our list.
+
+const AI_KW_SCRAPER       = /\b(AI|LLM|GPT|Claude|OpenAI|Anthropic|Gemini|machine learning|neural|agents?|model release|inference|fine.?tun|RAG|copilot|Sora|Grok)\b/i;
+const CRYPTO_KW_SCRAPER   = /\b(bitcoin|ethereum|crypto|DeFi|NFT|blockchain|token|web3|wallet|on.?chain|solana|altcoin|stablecoin|BTC|ETH|memecoin|DAO)\b/i;
+const SECURITY_KW_SCRAPER = /\b(cybersecurity|breach|hack|ransomware|malware|phishing|vulnerability|CVE|exploit|zero.?day|CISA|data leak|infosec|password|credential)\b/i;
+
+async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCategory"]> {
+  const token = process.env.APIFY_API_TOKEN;
+  if (!token) return {};
+
+  try {
+    const { ApifyClient } = await import("apify-client");
+    const apify = new ApifyClient({ token });
+
+    console.log("[scraper] Twitter trending: searching by category...");
+
+    // One call, 3 search terms — Apify fetches Top posts across all 3
+    const run = await apify.actor("apidojo/tweet-scraper").call({
+      searchTerms: [
+        "AI agents model released",
+        "Bitcoin crypto DeFi blockchain",
+        "cybersecurity hacked breach vulnerability",
+      ],
+      maxItems: 45,          // 15 per search term ceiling
+      minimumFavorites: 500, // only truly viral posts
+      sort: "Top",           // most-engaged posts first
+      addUserInfo: false,
+    });
+
+    const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+    console.log(`[scraper] Twitter trending: got ${items.length} posts`);
+
+    const byCategory: Record<string, TrendingPost[]> = { ai: [], crypto: [], security: [] };
+
+    for (const tweet of items as Record<string, unknown>[]) {
+      const text = (tweet.text ?? tweet.full_text ?? "") as string;
+      if (!text || text.length < 20 || text.startsWith("RT @")) continue;
+
+      const likes    = (tweet.favoriteCount ?? tweet.like_count ?? 0) as number;
+      const retweets = (tweet.retweetCount  ?? tweet.retweet_count ?? 0) as number;
+      const replies  = (tweet.replyCount    ?? tweet.reply_count ?? 0) as number;
+      const views    = (tweet.viewCount     ?? tweet.view_count ?? undefined) as number | undefined;
+      const author   = (tweet.author?.userName ?? tweet.user?.screen_name ?? "unknown") as string;
+      const tweetId  = (tweet.id ?? tweet.id_str ?? "") as string;
+      const createdAt = (tweet.createdAt ?? tweet.created_at ?? new Date().toISOString()) as string;
+
+      const post: TrendingPost = {
+        title: text.slice(0, 280).replace(/\n+/g, " "),
+        url: `https://x.com/${author}/status/${tweetId}`,
+        points: likes + retweets * 2,
+        comments: replies,
+        source: "twitter" as const,
+        createdAt,
+        author,
+        likes,
+        views,
+      };
+
+      if (SECURITY_KW_SCRAPER.test(text))   byCategory.security.push(post);
+      else if (CRYPTO_KW_SCRAPER.test(text)) byCategory.crypto.push(post);
+      else                                   byCategory.ai.push(post);
+    }
+
+    // Pick the single highest-engagement post per category
+    const top = (arr: TrendingPost[]) => arr.sort((a, b) => b.points - a.points)[0];
+
+    return {
+      ai:       top(byCategory.ai),
+      crypto:   top(byCategory.crypto),
+      security: top(byCategory.security),
+    };
+  } catch (err) {
+    console.error("[scraper] Twitter trending error:", err);
+    return {};
   }
 }
 
@@ -1061,11 +1140,23 @@ function scorePost(post: TrendPost): number {
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
+export interface TrendingPost extends TrendPost {
+  author: string;         // @handle of the person who posted
+  likes: number;          // raw like count for display
+  views?: number;         // impressions if available
+}
+
 export interface FetchTrendsResult {
   /** Every scraped post — deduplicated but unfiltered. Write this to Sheets. */
   all: TrendPost[];
   /** Top 50 by virality score — pass this to Claude. */
   top: TrendPost[];
+  /** Highest-engagement tweet per category from X trending search. */
+  trendingByCategory: {
+    ai?:       TrendingPost;
+    crypto?:   TrendingPost;
+    security?: TrendingPost;
+  };
 }
 
 export async function fetchTrends(): Promise<FetchTrendsResult> {
@@ -1074,7 +1165,7 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
   const [hn, reddit, yc, ph, tc, lobsters, hf, devto, github, ih, bsky, twitter,
          coindesk, cointelegraph, decrypt, theblock, blockworks, bitcoinmag,
          messari, cryptoslate, cryptobriefing, beincrypto, bankless, cryptonews,
-         dlnews, wublockchain, coingeckonews, rwaxyz] =
+         dlnews, wublockchain, coingeckonews, rwaxyz, trendingByCategory] =
     await Promise.allSettled([
       scrapeHackerNews(),
       scrapeReddit(),
@@ -1104,6 +1195,7 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
       scrapeWuBlockchain(),
       scrapeCoinGeckoNews(),
       scrapeRwaXyz(),
+      scrapeTwitterTrending(),   // category search — runs in parallel, costs ~45 tweets
     ]);
 
   const raw: TrendPost[] = [
@@ -1215,7 +1307,12 @@ export async function fetchTrends(): Promise<FetchTrendsResult> {
   console.log(
     `[scraper] ${raw.length} raw → ${all.length} deduped (→ Sheets) → top ${top.length} (→ LLM)`
   );
-  return { all, top };
+
+  const trending = trendingByCategory.status === "fulfilled" ? trendingByCategory.value : {};
+  const trendKeys = Object.keys(trending).filter(k => trending[k as keyof typeof trending]);
+  console.log(`[scraper] Trending on X by category: ${trendKeys.join(", ") || "none"}`);
+
+  return { all, top, trendingByCategory: trending };
 }
 
 // ─── Run directly for testing ─────────────────────────────────────────────────

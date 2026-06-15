@@ -4,6 +4,7 @@
  */
 
 import type { IdeaResult, Idea, MediaRec } from "./prompt";
+import type { TrendingPost } from "./scraper";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
@@ -70,6 +71,33 @@ export function formatDailyBrief(result: IdeaResult): string {
   }
 
   return lines.join("\n");
+}
+
+// ─── Format trending X section ───────────────────────────────────────────────
+
+export function formatTrendingOnX(
+  trending: { ai?: TrendingPost; crypto?: TrendingPost; security?: TrendingPost }
+): string {
+  const entries: { emoji: string; label: string; post: TrendingPost }[] = [];
+  if (trending.ai)       entries.push({ emoji: "🤖", label: "AI",       post: trending.ai });
+  if (trending.crypto)   entries.push({ emoji: "₿",  label: "CRYPTO",   post: trending.crypto });
+  if (trending.security) entries.push({ emoji: "🔐", label: "SECURITY", post: trending.security });
+  if (!entries.length) return "";
+
+  const lines = ["🔥 *WHAT'S HOT ON X RIGHT NOW*", ""];
+  for (const { emoji, label, post } of entries) {
+    const engagement = post.views
+      ? `${(post.views / 1000).toFixed(0)}K views`
+      : `${(post.likes / 1000).toFixed(1)}K likes`;
+    const snippet = post.title.length > 120
+      ? post.title.slice(0, 120).trimEnd() + "…"
+      : post.title;
+    lines.push(`${emoji} *${label}* · @${post.author} · _${engagement}_`);
+    lines.push(`"${snippet}"`);
+    lines.push(`[→ view tweet](${post.url})`);
+    lines.push("");
+  }
+  return lines.join("\n").trim();
 }
 
 // ─── Build per-idea feedback keyboard ────────────────────────────────────────
@@ -152,7 +180,8 @@ function buildMediaButtons(recs: MediaRec[], ideaId: string) {
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string,
-  mediaRecs?: MediaRec[]
+  mediaRecs?: MediaRec[],
+  trending?: { ai?: TrendingPost; crypto?: TrendingPost; security?: TrendingPost }
 ): Promise<number> {
   const text = formatDailyBrief(result);
   const chunks = chunkText(text);
@@ -161,6 +190,15 @@ export async function sendDailyBrief(
   for (let i = 0; i < chunks.length; i++) {
     lastMessageId = await sendMessage(chunks[i]);
     console.log(`[telegram] Message chunk ${i + 1}/${chunks.length} sent: ${lastMessageId}`);
+  }
+
+  // Send "What's Hot on X" — top viral post per category with link
+  if (trending && (trending.ai || trending.crypto || trending.security)) {
+    const trendingText = formatTrendingOnX(trending);
+    if (trendingText) {
+      await sendMessage(trendingText);
+      console.log("[telegram] Trending on X section sent");
+    }
   }
 
   // Send separate per-idea feedback message
