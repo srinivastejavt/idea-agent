@@ -99,7 +99,7 @@ export const morningRun = schedules.task({
 export const eveningRun = schedules.task({
   id: "idea-generator-evening",
   cron: "30 12 * * *",  // 6:00pm IST — EU full day + US pre-market buzz
-  run: () => runIdeaGeneration("Evening (6pm IST)", true, false), // media recs only
+  run: () => runIdeaGeneration("Evening (6pm IST)", true, true), // media recs + trending X
 });
 
 // ─── Run 3: 11:00pm IST (5:30pm UTC) ─────────────────────────────────────────
