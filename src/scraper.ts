@@ -21,7 +21,7 @@
  *   Bitcoin Mag    → RSS (Bitcoin-specific)
  *   Reddit crypto  → r/CryptoCurrency, r/ethereum, r/bitcoin, r/defi, r/web3, r/solana
  *
- * X/Twitter: Apify apidojo/tweet-scraper — set APIFY_API_TOKEN to enable
+ * X/Twitter: Apify data-slayer/twitter-search — set APIFY_API_TOKEN to enable
  */
 
 export interface TrendPost {
@@ -880,53 +880,24 @@ async function scrapeBluesky(): Promise<TrendPost[]> {
   return posts;
 }
 
-// ─── X/Twitter via Apify (apidojo/tweet-scraper) ────────────────────────────
+// ─── X/Twitter via Apify (data-slayer/twitter-search) ───────────────────────
+// Keyword-based search — 100% success rate, no cookies required.
 
-/**
- * High-signal thought leaders across AI, crypto, and indie building.
- * These accounts post 6-12h before the same ideas surface on HN/Reddit.
- * Update this list as the space evolves — quality over quantity.
- */
-const TWITTER_HANDLES = [
-  // ── AI Leaders (4) ───────────────────────────────────────────────────────
-  "sama",           // OpenAI CEO — drives the biggest AI discourse
-  "DarioAmodei",    // Anthropic CEO — safety + capability framing
-  "satyanadella",   // Microsoft CEO — enterprise AI + product direction
-  "karpathy",       // ex-OpenAI/Tesla — authoritative technical takes
-  // ── AI Practitioners (7) ─────────────────────────────────────────────────
-  "emollick",       // Wharton prof — best practical AI research commentary
-  "swyx",           // latent space — AI engineer community pulse
-  "simonw",         // LLM tools — "here's what this actually does" takes
-  "mattshumer_",    // AI product builder — fast takes on new capabilities
-  "AravSrinivas",   // Perplexity CEO — AI search + product strategy
-  "ClementDelangue",// HuggingFace CEO — open-source model releases
-  "alexalbert__",   // Anthropic — Claude updates, model behavior intel
-  // ── AI Critics (2) ───────────────────────────────────────────────────────
-  "GaryMarcus",     // loudest AI critic — pure contrarian tweet fuel
-  "ylecun",         // Meta AI — counternarrative to OpenAI hype
-  // ── Crypto News + Signal (7) ─────────────────────────────────────────────
-  "WuBlockchain",   // China/Asia crypto intel — earliest on exchange moves
-  "lookonchain",    // on-chain whale tracking — earliest signal on big moves
-  "laurashin",      // Unchained journalist — breaks scoops
-  "MessariCrypto",  // research-grade analysis, not just headlines
-  "DLNews_",        // high quality institutional crypto journalism
-  "CryptoHayes",    // BitMEX founder — macro/crypto cycles, sharp writing
-  "cobie",          // crypto culture — contrarian cycle takes
-  // ── Security / Cybersecurity (3) ─────────────────────────────────────────
-  "briankrebs",     // KrebsOnSecurity — breaks the biggest breaches
-  "troyhunt",       // HaveIBeenPwned — data breach + infosec authority
-  "SwiftOnSecurity",// practical security takes — massive following
-  // ── Indie Builders (4) ───────────────────────────────────────────────────
-  "levelsio",       // ships fast, real revenue numbers, no fluff
-  "patio11",        // business of software — pricing, distribution
-  "marc_louvion",   // SaaS builder — growth experiments with real numbers
-  "natfriedman",    // ex-GitHub CEO — AI coding tools, sharp operator takes
-  // ── Podcasters / Idea Generators (4) ─────────────────────────────────────
-  "gregisenberg",   // AI product ideas, community-led growth — posts daily
-  "ShaanVP",        // My First Million — startup takes, what's blowing up
-  "jason",          // All-In / TWIST — startup culture, early stage signal
-  "danshipper",     // Every.to — AI x writing/productivity, thoughtful takes
-];
+/** Call Apify actor via REST API — avoids apify-client ProxyAgent issue in serverless */
+async function apifyRun(actorId: string, input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  const token = process.env.APIFY_API_TOKEN!;
+  const res = await fetch(
+    `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${token}&timeout=120&memory=256`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(130_000),
+    }
+  );
+  if (!res.ok) throw new Error(`Apify ${actorId} failed: ${res.status} ${await res.text()}`);
+  return res.json() as Promise<Record<string, unknown>[]>;
+}
 
 async function scrapeTwitter(): Promise<TrendPost[]> {
   const token = process.env.APIFY_API_TOKEN;
@@ -936,48 +907,50 @@ async function scrapeTwitter(): Promise<TrendPost[]> {
   }
 
   try {
-    const { ApifyClient } = await import("apify-client");
-    const client = new ApifyClient({ token });
+    console.log(`[scraper] Twitter/X: searching for builder/AI content via data-slayer/twitter-search`);
 
-    console.log(`[scraper] Twitter/X: scraping ${TWITTER_HANDLES.length} accounts via Apify`);
+    // Two keyword searches to cover indie builder + AI content
+    const [builderResult, aiResult] = await Promise.allSettled([
+      apifyRun("data-slayer~twitter-search", { query: "launched side project built tool startup", section: "top", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: "AI LLM Claude OpenAI agents model release", section: "top", maxPages: 1 }),
+    ]);
 
-    // Fetch tweets from the last 24h from curated accounts
-    const run = await client.actor("apidojo/tweet-scraper").call({
-      twitterHandles: TWITTER_HANDLES,
-      maxItems: 60,           // ~2 tweets per account across 31 handles (budget freed for category search)
-      minimumFavorites: 50,   // filter out low-engagement noise
-      sort: "Latest",
-      addUserInfo: false,     // saves cost — we don't need profile data
-    });
+    const allItems = [
+      ...(builderResult.status === "fulfilled" ? builderResult.value : []),
+      ...(aiResult.status === "fulfilled" ? aiResult.value : []),
+    ];
 
-    const { items } = await client.dataset(run.defaultDatasetId).listItems();
-    console.log(`[scraper] Twitter/X: got ${items.length} tweets`);
+    console.log(`[scraper] Twitter/X: got ${allItems.length} raw from Apify`);
 
     const posts: TrendPost[] = [];
-    for (const tweet of items as Record<string, unknown>[]) {
-      const text = (tweet.text ?? tweet.full_text ?? "") as string;
-      if (!text || text.length < 30) continue;
+    const seen = new Set<string>();
 
-      // Skip pure retweets (RT @...) — only original takes
+    for (const tweet of allItems) {
+      const text = (tweet.text ?? "") as string;
+      if (!text || text.length < 30) continue;
       if (text.startsWith("RT @")) continue;
 
-      const likes    = (tweet.favoriteCount ?? tweet.like_count ?? 0) as number;
-      const retweets = (tweet.retweetCount  ?? tweet.retweet_count ?? 0) as number;
-      const replies  = (tweet.replyCount    ?? tweet.reply_count ?? 0) as number;
-      const author   = (tweet.author?.userName ?? tweet.user?.screen_name ?? "unknown") as string;
-      const tweetId  = (tweet.id ?? tweet.id_str ?? "") as string;
-      const createdAt = (tweet.createdAt ?? tweet.created_at ?? new Date().toISOString()) as string;
+      const tweetId = (tweet.tweet_id ?? "") as string;
+      if (!tweetId || seen.has(tweetId)) continue;
+      seen.add(tweetId);
+
+      const likes    = (tweet.favorites ?? 0) as number;
+      const retweets = (tweet.retweets ?? 0) as number;
+      const replies  = (tweet.replies  ?? 0) as number;
+      const author   = (tweet.screen_name ?? "unknown") as string;
+      const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
 
       posts.push({
         title: text.slice(0, 200).replace(/\n+/g, " "),
         url: `https://x.com/${author}/status/${tweetId}`,
-        points: likes + retweets * 2,   // retweets carry more signal than likes
+        points: likes + retweets * 2,
         comments: replies,
         source: "twitter" as const,
         createdAt,
       });
     }
 
+    console.log(`[scraper] Twitter/X: ${posts.length} valid posts after filtering`);
     return posts;
   } catch (err) {
     console.error("[scraper] Twitter/X error:", err);
@@ -998,65 +971,59 @@ async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCat
   if (!token) return {};
 
   try {
-    const { ApifyClient } = await import("apify-client");
-    const apify = new ApifyClient({ token });
+    console.log("[scraper] Twitter trending: searching by category via data-slayer/twitter-search...");
 
-    console.log("[scraper] Twitter trending: searching by category...");
+    // 3 parallel searches — one per category (actor takes one query at a time)
+    const [aiResult, cryptoResult, securityResult] = await Promise.allSettled([
+      apifyRun("data-slayer~twitter-search", { query: "AI LLM OpenAI Claude Anthropic Gemini model agents", section: "top", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: "bitcoin ethereum crypto DeFi blockchain web3 solana", section: "top", maxPages: 1 }),
+      apifyRun("data-slayer~twitter-search", { query: "cybersecurity breach hack vulnerability CVE infosec", section: "top", maxPages: 1 }),
+    ]);
 
-    // One call, 3 search terms — Apify fetches Top posts across all 3
-    const run = await apify.actor("apidojo/tweet-scraper").call({
-      searchTerms: [
-        "AI agents model released",
-        "Bitcoin crypto DeFi blockchain",
-        "cybersecurity hacked breach vulnerability",
-      ],
-      maxItems: 45,          // 15 per search term ceiling
-      minimumFavorites: 500, // only truly viral posts
-      sort: "Top",           // most-engaged posts first
-      addUserInfo: false,
-    });
+    const processItems = (items: Record<string, unknown>[]): TrendingPost[] => {
+      const posts: TrendingPost[] = [];
+      for (const tweet of items) {
+        const text = (tweet.text ?? "") as string;
+        if (!text || text.length < 20 || text.startsWith("RT @")) continue;
 
-    const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-    console.log(`[scraper] Twitter trending: got ${items.length} posts`);
+        const likes    = (tweet.favorites ?? 0) as number;
+        const retweets = (tweet.retweets  ?? 0) as number;
+        const replies  = (tweet.replies   ?? 0) as number;
+        const viewsStr = (tweet.views ?? "") as string;
+        const views    = viewsStr ? (parseInt(viewsStr, 10) || undefined) : undefined;
+        const author   = (tweet.screen_name ?? "unknown") as string;
+        const tweetId  = (tweet.tweet_id ?? "") as string;
+        const createdAt = (tweet.created_at ?? new Date().toISOString()) as string;
 
-    const byCategory: Record<string, TrendingPost[]> = { ai: [], crypto: [], security: [] };
+        if (!tweetId) continue;
 
-    for (const tweet of items as Record<string, unknown>[]) {
-      const text = (tweet.text ?? tweet.full_text ?? "") as string;
-      if (!text || text.length < 20 || text.startsWith("RT @")) continue;
+        posts.push({
+          title: text.slice(0, 280).replace(/\n+/g, " "),
+          url: `https://x.com/${author}/status/${tweetId}`,
+          points: likes + retweets * 2,
+          comments: replies,
+          source: "twitter" as const,
+          createdAt,
+          author,
+          likes,
+          views,
+        });
+      }
+      return posts;
+    };
 
-      const likes    = (tweet.favoriteCount ?? tweet.like_count ?? 0) as number;
-      const retweets = (tweet.retweetCount  ?? tweet.retweet_count ?? 0) as number;
-      const replies  = (tweet.replyCount    ?? tweet.reply_count ?? 0) as number;
-      const views    = (tweet.viewCount     ?? tweet.view_count ?? undefined) as number | undefined;
-      const author   = (tweet.author?.userName ?? tweet.user?.screen_name ?? "unknown") as string;
-      const tweetId  = (tweet.id ?? tweet.id_str ?? "") as string;
-      const createdAt = (tweet.createdAt ?? tweet.created_at ?? new Date().toISOString()) as string;
+    const aiPosts       = aiResult.status === "fulfilled"       ? processItems(aiResult.value)       : [];
+    const cryptoPosts   = cryptoResult.status === "fulfilled"   ? processItems(cryptoResult.value)   : [];
+    const securityPosts = securityResult.status === "fulfilled" ? processItems(securityResult.value) : [];
 
-      const post: TrendingPost = {
-        title: text.slice(0, 280).replace(/\n+/g, " "),
-        url: `https://x.com/${author}/status/${tweetId}`,
-        points: likes + retweets * 2,
-        comments: replies,
-        source: "twitter" as const,
-        createdAt,
-        author,
-        likes,
-        views,
-      };
+    console.log(`[scraper] Twitter trending: ${aiPosts.length} AI, ${cryptoPosts.length} crypto, ${securityPosts.length} security posts`);
 
-      if (SECURITY_KW_SCRAPER.test(text))   byCategory.security.push(post);
-      else if (CRYPTO_KW_SCRAPER.test(text)) byCategory.crypto.push(post);
-      else                                   byCategory.ai.push(post);
-    }
-
-    // Pick the single highest-engagement post per category
     const top = (arr: TrendingPost[]) => arr.sort((a, b) => b.points - a.points)[0];
 
     return {
-      ai:       top(byCategory.ai),
-      crypto:   top(byCategory.crypto),
-      security: top(byCategory.security),
+      ai:       top(aiPosts),
+      crypto:   top(cryptoPosts),
+      security: top(securityPosts),
     };
   } catch (err) {
     console.error("[scraper] Twitter trending error:", err);
@@ -1308,9 +1275,40 @@ export async function fetchTrends(includeTrending = false): Promise<FetchTrendsR
     `[scraper] ${raw.length} raw → ${all.length} deduped (→ Sheets) → top ${top.length} (→ LLM)`
   );
 
-  const trending = trendingByCategory.status === "fulfilled" ? trendingByCategory.value : {};
+  let trending = trendingByCategory.status === "fulfilled" ? trendingByCategory.value : {};
+
+  // Fallback: if trending search returned nothing (network error etc.), classify top web posts
+  const classifyPosts = (posts: TrendPost[], sourceLabel: string) => {
+    console.log(`[scraper] Trending fallback: classifying ${posts.length} posts from ${sourceLabel}`);
+    const byCategory: Record<string, TrendingPost[]> = { ai: [], crypto: [], security: [] };
+    for (const post of posts) {
+      const text = post.title;
+      const author = post.url.split("/")[3] ?? post.source;
+      const tp: TrendingPost = { ...post, author, likes: post.points };
+      if (SECURITY_KW_SCRAPER.test(text))    byCategory.security.push(tp);
+      else if (CRYPTO_KW_SCRAPER.test(text)) byCategory.crypto.push(tp);
+      else                                    byCategory.ai.push(tp);
+    }
+    const topPost = (arr: TrendingPost[]) => arr.sort((a, b) => b.points - a.points)[0];
+    return {
+      ai:       topPost(byCategory.ai),
+      crypto:   topPost(byCategory.crypto),
+      security: topPost(byCategory.security),
+    };
+  };
+
+  if (!trending.ai && !trending.crypto && !trending.security) {
+    const twitterPosts = twitter.status === "fulfilled" ? twitter.value : [];
+    if (twitterPosts.length > 0) {
+      trending = classifyPosts(twitterPosts, "Twitter account tweets");
+    } else {
+      // Twitter completely unavailable — fall back to top web posts
+      trending = classifyPosts(top, "top web posts");
+    }
+  }
+
   const trendKeys = Object.keys(trending).filter(k => trending[k as keyof typeof trending]);
-  console.log(`[scraper] Trending on X by category: ${trendKeys.join(", ") || "none"}`);
+  console.log(`[scraper] Trending by category: ${trendKeys.join(", ") || "none"}`);
 
   return { all, top, trendingByCategory: trending };
 }
