@@ -46,6 +46,13 @@ export interface MediaRec {
   reason: string; // one sentence: why relevant to today's trends
 }
 
+export interface IdeaEval {
+  name: string;          // idea name
+  why: string;           // Hamming: why this problem matters & why others aren't building it
+  belief: string;        // what must be true for this to matter in 2 years
+  killCondition: string; // what would make you drop it immediately
+}
+
 export interface IdeaResult {
   trend: string;
   mechanic: string;
@@ -60,6 +67,7 @@ export interface IdeaResult {
     other: string[];
   };
   tweetIdeas: TweetIdea[];
+  ideaEval: IdeaEval[];
 }
 
 // ─── Voice reference ──────────────────────────────────────────────────────────
@@ -249,26 +257,20 @@ function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
 async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
   const response = await client.chat.completions.create({
     model: "deepseek/deepseek-v4-flash", // cheap + fast, no need for heavy reasoning
-    max_tokens: 1200,
+    max_tokens: 2000,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
         content: `You help a solo tech founder find non-obvious angles on tech/crypto/startup/security news to tweet about.
 
-This founder writes like this (Hamming + @itsreallyvivek style):
-- Asks the uncomfortable question nobody else is asking out loud
-- Names specific companies, people, products — NOT categories ("OpenAI", not "AI labs")
-- Exposes the "quiet reason" — the real incentive behind the move most people don't say
-- Surfaces the gap between what's said publicly and what's actually happening
-- Calls out hypocrisy when incentives don't match rhetoric, with receipts
-- Never states the obvious — if everyone already knows it, it's not worth posting
-- Prefers "Most people think X. The actual pattern is Y." framing
-
-For each trend, give 3 angles with DISTINCT lenses:
+For each trend, give 6 angles with DISTINCT lenses:
 1. INCENTIVE lens — who specifically benefits, who's being misled, what's the real motive ("The quiet reason [Company] is doing [X] is [Y]")
 2. CONTRARIAN lens — the "actually..." take, what everyone is getting wrong about this
 3. BUILDER lens — what this means specifically for solo founders to DO this week, not just to think about
+4. STORY lens — a micro-story hook with a specific outcome ("I did X because of this. Here's what happened: [number/result]")
+5. PREDICTION lens — where this leads in 6-12 months that nobody is talking about yet
+6. HOT TAKE lens — one punchy, polarizing opinion that makes people pick a side (agree or rage-reply)
 
 Rules:
 - Each angle = one punchy sentence, max 120 chars
@@ -286,9 +288,9 @@ ${trends.map((t, i) => `${i + 1}. [${(t.category ?? "other").toUpperCase()}] ${t
 For each trend, give 3 distinct tweet angles. Return JSON:
 {
   "tweetIdeas": [
-    {"trend": "one-line summary of trend 1", "angles": ["angle 1", "angle 2", "angle 3"]},
-    {"trend": "one-line summary of trend 2", "angles": ["angle 1", "angle 2", "angle 3"]},
-    {"trend": "one-line summary of trend 3", "angles": ["angle 1", "angle 2", "angle 3"]}
+    {"trend": "one-line summary of trend 1", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]},
+    {"trend": "one-line summary of trend 2", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]},
+    {"trend": "one-line summary of trend 3", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]}
   ]
 }`,
       },
@@ -296,14 +298,65 @@ For each trend, give 3 distinct tweet angles. Return JSON:
   });
 
   const text = stripFences(response.choices[0].message.content ?? "{}");
-  const { tweetIdeas } = JSON.parse(text);
-  const ideas = (tweetIdeas ?? []) as TweetIdea[];
+  const parsed = JSON.parse(text);
+  // Tolerate whatever top-level key the model uses
+  const ideas = (
+    parsed.tweetIdeas ?? parsed.tweet_ideas ?? parsed.ideas ?? parsed.trends ??
+    (Array.isArray(parsed) ? parsed : Object.values(parsed).find(Array.isArray))
+    ?? []
+  ) as TweetIdea[];
 
   // Attach source URLs from the corresponding trend (Twitter posts → direct link to the viral tweet)
   return ideas.map((idea, i) => ({
     ...idea,
     sourceUrl: trends[i]?.sourceUrl,
   }));
+}
+
+// ─── Step 4: Hamming filter — which ideas are actually worth building? ────────
+// Applies Richard Hamming's question ("what's the important problem and why
+// aren't you working on it?") + Schulman's backwards reasoning to cut through
+// the absorbed-from-trending noise and surface the 2-3 genuinely worth pursuing.
+
+async function evaluateIdeas(ideas: Idea[], trends: TrendSignal[]): Promise<IdeaEval[]> {
+  const ideasText = ideas
+    .map((idea, i) => `${i + 1}. [${idea.category ?? "other"}] ${idea.name} — ${idea.description}`)
+    .join("\n");
+
+  const trendsText = trends.map(t => t.trend).join("\n");
+
+  const response = await client.chat.completions.create({
+    model: "deepseek/deepseek-v4-flash",
+    max_tokens: 1000,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: `You are a brutal research advisor applying Richard Hamming's question to startup ideas.
+
+Hamming's question: "What are the important problems in your field, and why aren't you working on them?"
+
+Most ideas are absorbed from what's trending — they're reactions, not choices. Your job is to find the 2-3 ideas that are genuinely important, not just topical.
+
+For each pick, answer:
+1. WHY this problem matters beyond this week's trend — and why others aren't building it (is it contrarian? technically hard? unglamorous?)
+2. WHAT must be true in 2 years for this to matter — the key assumption that needs to hold
+3. KILL CONDITION — one sentence that would make you drop it immediately ("if X turns out to be true, this is dead")
+
+Be brutal. Most ideas are noise. Only surface ones that would survive Hamming asking "why aren't a thousand people already building this?"
+
+Respond ONLY with valid JSON. No markdown.`,
+      },
+      {
+        role: "user",
+        content: `Today's trends:\n${trendsText}\n\nToday's ideas:\n${ideasText}\n\nPick the top 2-3 worth actually building. Return JSON:\n{"eval": [{"name": "idea name", "why": "one sentence", "belief": "one sentence", "killCondition": "one sentence"}, ...]}`,
+      },
+    ],
+  });
+
+  const text = stripFences(response.choices[0].message.content ?? "{}");
+  const { eval: picks } = JSON.parse(text);
+  return (picks ?? []) as IdeaEval[];
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -345,6 +398,9 @@ export async function generateDailyIdeas(
     }),
   ]);
 
+  // Keyword-correct any ideas the LLM miscategorized (needed before eval)
+  // Note: we do this early so evaluateIdeas sees the corrected list
+
   const allIdeas: Idea[] = [];
   for (const [i, result] of results.entries()) {
     if (result.status === "fulfilled") {
@@ -356,6 +412,7 @@ export async function generateDailyIdeas(
   }
 
   // Keyword-correct any ideas the LLM miscategorized
+  // Note: we do this early so evaluateIdeas sees the corrected list (comment already above)
   const correctedIdeas = recategorize(allIdeas, trends);
 
   const topPick = correctedIdeas[0]
@@ -372,6 +429,13 @@ export async function generateDailyIdeas(
   };
   console.log(`[prompt] Tweet angles: ${tweetIdeas.length} trends covered`);
 
+  // Run Hamming filter on corrected ideas
+  const ideaEval = await evaluateIdeas(correctedIdeas, trends).catch(err => {
+    console.warn("[prompt] Idea eval failed (non-fatal):", err?.message);
+    return [] as IdeaEval[];
+  });
+  console.log(`[prompt] Hamming filter: ${ideaEval.length} ideas surfaced`);
+
   return {
     trend: trends.map(t => t.trend).join(" | "),
     mechanic: primary.mechanic,
@@ -383,6 +447,7 @@ export async function generateDailyIdeas(
       .map(t => ({ title: t.sourceTitle!, url: t.sourceUrl! })),
     trendsByCategory,
     tweetIdeas,
+    ideaEval,
   };
 }
 
@@ -424,18 +489,21 @@ Reply with JSON only — an array of objects:
 
   try {
     const raw = res.choices[0]?.message?.content ?? "{}";
+    console.log(`[prompt] pickMediaRecs raw: ${raw.slice(0, 200)}`);
     const parsed = JSON.parse(raw);
+    // Handle any wrapper key the model might use
     const picks: { index: number; reason: string }[] = Array.isArray(parsed)
       ? parsed
-      : parsed.picks ?? parsed.recommendations ?? [];
+      : parsed.picks ?? parsed.recommendations ?? parsed.results ?? parsed.episodes ?? Object.values(parsed)[0] ?? [];
 
+    console.log(`[prompt] pickMediaRecs: ${picks.length} picks from ${media.length} items`);
     return picks.map(p => {
       const item = media[p.index - 1];
       if (!item) return null;
       return { show: item.show, title: item.title, url: item.url, type: item.type, reason: p.reason };
     }).filter(Boolean) as MediaRec[];
-  } catch {
-    console.warn("[prompt] pickMediaRecs: failed to parse response");
+  } catch (err) {
+    console.warn("[prompt] pickMediaRecs: failed to parse response:", (err as Error).message);
     return [];
   }
 }
