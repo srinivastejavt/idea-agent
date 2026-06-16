@@ -33,9 +33,11 @@ export interface Idea {
 }
 
 export interface TweetIdea {
-  trend: string;        // the headline trend
-  angles: string[];     // 3 angles/hooks to post about
-  sourceUrl?: string;   // original X/tweet/post URL that sparked the trend
+  trend: string;                                      // the headline trend
+  angles: string[];                                   // 3-6 angles/hooks to post about
+  category?: "ai" | "crypto" | "security" | "other"; // which vertical
+  sourceUrl?: string;                                 // link to source article
+  sourceTitle?: string;                               // title of the source article
 }
 
 export interface MediaRec {
@@ -338,10 +340,12 @@ async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
     merged.push({ ...base, angles: combinedAngles });
   }
 
-  // Attach source URLs from the corresponding trend
+  // Attach source metadata from the corresponding trend
   return merged.map((idea, i) => ({
     ...idea,
-    sourceUrl: trends[i]?.sourceUrl,
+    category:    trends[i]?.category,
+    sourceUrl:   trends[i]?.sourceUrl,
+    sourceTitle: trends[i]?.sourceTitle,
   }));
 }
 

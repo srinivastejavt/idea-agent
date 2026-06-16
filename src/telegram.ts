@@ -62,15 +62,32 @@ export function formatDailyBrief(result: IdeaResult): string {
 
 export function formatTweetAngles(tweetIdeas: IdeaResult["tweetIdeas"]): string {
   if (!tweetIdeas?.length) return "";
+
+  const CAT_EMOJI: Record<string, string> = {
+    ai: "🤖", crypto: "₿", security: "🔐", other: "🌐",
+  };
+
   const lines = [
     "🐦 *TWEET ANGLES*",
     "_Pick one → open Claude chat → make it yours_",
   ];
-  for (const { trend, angles, sourceUrl } of tweetIdeas) {
+
+  for (const { trend, angles, category, sourceUrl, sourceTitle } of tweetIdeas) {
+    const catLabel = category ? `${CAT_EMOJI[category] ?? "🌐"} *${category.toUpperCase()}*` : "";
     const trendLine = sourceUrl
-      ? `\n📌 [${trend}](${sourceUrl})`
-      : `\n📌 _${trend}_`;
+      ? `📌 [${trend}](${sourceUrl})`
+      : `📌 _${trend}_`;
+
+    lines.push("");
+    if (catLabel) lines.push(catLabel);
     lines.push(trendLine);
+
+    // Show source article title as a "why you're seeing this" link
+    if (sourceTitle && sourceUrl) {
+      const shortTitle = sourceTitle.length > 70 ? sourceTitle.slice(0, 70) + "…" : sourceTitle;
+      lines.push(`_📰 [${shortTitle}](${sourceUrl})_`);
+    }
+
     for (const angle of angles) {
       lines.push(`• ${angle}`);
     }
