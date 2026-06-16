@@ -900,6 +900,9 @@ async function apifyRun(actorId: string, input: Record<string, unknown>): Promis
 }
 
 async function scrapeTwitter(): Promise<TrendPost[]> {
+  // Disabled — Twitter/X scraping paused (proxy reliability + cost)
+  return [];
+
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
     console.log("[scraper] Twitter/X: skipping — APIFY_API_TOKEN not set");
@@ -1008,6 +1011,9 @@ function parseTrendingTweets(items: Record<string, unknown>[]): TrendingPost[] {
 }
 
 async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCategory"]> {
+  // Disabled — "What's Hot on X" section paused (proxy reliability + cost)
+  return {};
+
   const token = process.env.APIFY_API_TOKEN;
   if (!token) return {};
 
