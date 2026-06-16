@@ -13,7 +13,7 @@ import { schedules } from "@trigger.dev/sdk";
 import { fetchTrends } from "../scraper";
 import { generateDailyIdeas, pickMediaRecs } from "../prompt";
 import { saveIdeas, updateFeedback, saveLikedIdea, saveLikedMedia, saveMediaRecs, getTodaysRuns, getRecentLikedIdeas, getRecentLikedMedia, computeWeeklyStats } from "../supabase";
-import { sendDailyBrief, sendTrendingOnX, sendTweetAngles, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
+import { sendDailyBrief, sendTrendingOnX, sendTweetAngles, sendIdeaEval, sendWeeklyDigest, parseCallback, answerCallback } from "../telegram";
 import { appendTrendsToSheet, cleanupOldTabs } from "../sheets";
 import { fetchRecentMedia } from "../media";
 
@@ -59,12 +59,16 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false, include
   // 6. Fetch media recs if this is the evening run
   const mediaRecs = includeMedia
     ? await Promise.all([fetchRecentMedia(), getRecentLikedMedia()])
-        .then(([items, liked]) => pickMediaRecs(result.trend, items, liked.map(l => l.show)))
+        .then(([items, liked]) => {
+          console.log(`[daily-ideas] Media items fetched: ${items.length} (${items.filter(i => i.type === "youtube").length} videos, ${items.filter(i => i.type === "podcast").length} podcasts)`);
+          return pickMediaRecs(result.trend, items, liked.map(l => l.show));
+        })
         .catch(err => { console.error("[daily-ideas] media recs failed (non-fatal):", err.message); return []; })
     : [];
 
-  // 7a. Send trending X as its own standalone message first (if this run includes it)
-  if (includeTrending && (trendingByCategory.ai || trendingByCategory.crypto || trendingByCategory.security)) {
+  // 7a. Send "What's Hot" as its own standalone message first
+  // (always fires — falls back to top web posts when X/Twitter is unavailable)
+  if (trendingByCategory.ai || trendingByCategory.crypto || trendingByCategory.security) {
     await sendTrendingOnX(trendingByCategory).catch(err =>
       console.error("[daily-ideas] sendTrendingOnX failed (non-fatal):", err.message)
     );
@@ -76,6 +80,11 @@ async function runIdeaGeneration(runLabel: string, includeMedia = false, include
   // 7c. Send tweet angles as its own standalone message
   await sendTweetAngles(result.tweetIdeas).catch(err =>
     console.error("[daily-ideas] sendTweetAngles failed (non-fatal):", err.message)
+  );
+
+  // 7d. Send Hamming filter as its own standalone message
+  await sendIdeaEval(result.ideaEval).catch(err =>
+    console.error("[daily-ideas] sendIdeaEval failed (non-fatal):", err.message)
   );
 
   // 8. Update Supabase with Telegram message ID + save media recs
@@ -102,7 +111,7 @@ export const morningRun = schedules.task({
       console.error("[daily-ideas] Tab cleanup failed (non-fatal):", err.message)
     );
     // includeTrending=true: category X search runs once/day here (saves ~$1.08/month vs 3×/day)
-    return runIdeaGeneration("Morning (8am IST)", false, true);
+    return runIdeaGeneration("Morning (8am IST)", true, true); // includeMedia=true → videos 2x/day
   },
 });
 

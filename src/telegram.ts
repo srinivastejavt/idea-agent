@@ -3,7 +3,7 @@
  * Sends the daily brief and handles per-idea feedback callbacks
  */
 
-import type { IdeaResult, Idea, MediaRec } from "./prompt";
+import type { IdeaResult, Idea, MediaRec, IdeaEval } from "./prompt";
 import type { TrendingPost } from "./scraper";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -97,17 +97,21 @@ export function formatTrendingOnX(
   if (trending.security) entries.push({ emoji: "🔐", label: "SECURITY", post: trending.security });
   if (!entries.length) return "";
 
-  const lines = ["🔥 *WHAT'S HOT ON X RIGHT NOW*", ""];
+  const lines = ["🔥 *WHAT'S HOT RIGHT NOW*", ""];
   for (const { emoji, label, post } of entries) {
+    const isTwitter = post.source === "twitter";
     const engagement = post.views
       ? `${(post.views / 1000).toFixed(0)}K views`
-      : `${(post.likes / 1000).toFixed(1)}K likes`;
+      : post.likes > 0
+        ? `${(post.likes / 1000).toFixed(1)}K likes`
+        : `${post.points} pts`;
     const snippet = post.title.length > 120
       ? post.title.slice(0, 120).trimEnd() + "…"
       : post.title;
-    lines.push(`${emoji} *${label}* · @${post.author} · _${engagement}_`);
+    const sourceLabel = isTwitter ? `@${post.author}` : post.source;
+    lines.push(`${emoji} *${label}* · ${sourceLabel} · _${engagement}_`);
     lines.push(`"${snippet}"`);
-    lines.push(`[→ view tweet](${post.url})`);
+    lines.push(`[→ open](${post.url})`);
     lines.push("");
   }
   return lines.join("\n").trim();
@@ -164,13 +168,15 @@ async function sendMessage(
   return data.result.message_id;
 }
 
+// HTML mode — avoids Markdown breaking on underscores in podcast titles
 export function formatMediaRecs(recs: MediaRec[]): string {
-  const lines: string[] = ["🎧 *WATCH / LISTEN TONIGHT*", "_Picked based on today's trends_", ""];
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const lines: string[] = ["🎧 <b>WATCH / LISTEN TONIGHT</b>", "<i>Picked based on today's trends</i>", ""];
   for (const rec of recs) {
     const icon = rec.type === "youtube" ? "▶️" : "🎙";
-    lines.push(`${icon} *${rec.show}*`);
-    lines.push(`[${rec.title.slice(0, 80)}](${rec.url})`);
-    lines.push(`_${rec.reason}_`);
+    lines.push(`${icon} <b>${esc(rec.show)}</b>`);
+    lines.push(`<a href="${rec.url}">${esc(rec.title.slice(0, 80))}</a>`);
+    lines.push(`<i>${esc(rec.reason)}</i>`);
     lines.push("");
   }
   return lines.join("\n").trim();
@@ -202,6 +208,31 @@ export async function sendTrendingOnX(
   console.log("[telegram] Trending on X sent as standalone message");
 }
 
+// ─── Hamming filter — which ideas are actually worth building? ────────────────
+
+export function formatIdeaEval(ideaEval: IdeaEval[]): string {
+  if (!ideaEval?.length) return "";
+  const lines = [
+    "🔬 *HAMMING FILTER*",
+    "_What's the important problem — and why aren't you working on it?_",
+  ];
+  for (const pick of ideaEval) {
+    lines.push(`\n💡 *${pick.name}*`);
+    lines.push(`❓ *Why:* ${pick.why}`);
+    lines.push(`✅ *Must believe:* ${pick.belief}`);
+    lines.push(`☠️ *Kill if:* ${pick.killCondition}`);
+  }
+  return lines.join("\n");
+}
+
+export async function sendIdeaEval(ideaEval: IdeaEval[]): Promise<void> {
+  if (!ideaEval?.length) return;
+  const text = formatIdeaEval(ideaEval);
+  if (!text) return;
+  await sendMessage(text);
+  console.log(`[telegram] Hamming filter sent: ${ideaEval.length} picks`);
+}
+
 export async function sendDailyBrief(
   result: IdeaResult,
   ideaId: string,
@@ -226,6 +257,7 @@ export async function sendDailyBrief(
   // Send media recs as a separate message with like buttons (evening run only)
   if (mediaRecs?.length) {
     await sendMessage(formatMediaRecs(mediaRecs), {
+      parse_mode: "HTML",
       reply_markup: buildMediaButtons(mediaRecs, ideaId),
     });
     console.log(`[telegram] Media recs sent: ${mediaRecs.length} picks`);
