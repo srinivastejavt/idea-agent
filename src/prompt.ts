@@ -527,10 +527,15 @@ Reply with JSON only — an array of objects:
     const raw = res.choices[0]?.message?.content ?? "{}";
     console.log(`[prompt] pickMediaRecs raw: ${raw.slice(0, 200)}`);
     const parsed = JSON.parse(raw);
-    // Handle any wrapper key the model might use
-    const picks: { index: number; reason: string }[] = Array.isArray(parsed)
+    // Tolerate: bare array, wrapped array, or single object (when model picks exactly 1)
+    const rawPicks = Array.isArray(parsed)
       ? parsed
-      : parsed.picks ?? parsed.recommendations ?? parsed.results ?? parsed.episodes ?? Object.values(parsed)[0] ?? [];
+      : parsed.picks ?? parsed.recommendations ?? parsed.results ?? parsed.episodes ?? Object.values(parsed).find(Array.isArray) ?? parsed;
+    const picks: { index: number; reason: string }[] = Array.isArray(rawPicks)
+      ? rawPicks
+      : typeof rawPicks === "object" && rawPicks !== null && "index" in rawPicks
+        ? [rawPicks]   // single pick returned as bare object
+        : [];
 
     const capped = picks.slice(0, 5); // hard cap — Telegram message has a 4096 char limit
     console.log(`[prompt] pickMediaRecs: ${capped.length} picks from ${media.length} items`);
