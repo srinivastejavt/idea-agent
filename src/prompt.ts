@@ -507,7 +507,7 @@ ${likedBlock}
 Recent episodes/videos available:
 ${catalogue}
 
-Pick ALL episodes that are genuinely relevant to today's trends — could be 3, could be 10+. Do not cap arbitrarily. Only skip ones with no connection to today's topics. Prioritise episodes that directly discuss, debate, or provide context on what's trending. Mix podcasts + YouTube.
+Pick the 3-5 most relevant episodes. Quality over quantity — only include ones directly connected to today's topics. Mix podcasts + YouTube where possible.
 
 Reply with JSON only — an array of objects:
 [{ "index": <1-based number>, "reason": "<one sentence: why this is relevant to today>" }]`;
@@ -528,8 +528,9 @@ Reply with JSON only — an array of objects:
       ? parsed
       : parsed.picks ?? parsed.recommendations ?? parsed.results ?? parsed.episodes ?? Object.values(parsed)[0] ?? [];
 
-    console.log(`[prompt] pickMediaRecs: ${picks.length} picks from ${media.length} items`);
-    return picks.map(p => {
+    const capped = picks.slice(0, 5); // hard cap — Telegram message has a 4096 char limit
+    console.log(`[prompt] pickMediaRecs: ${capped.length} picks from ${media.length} items`);
+    return capped.map(p => {
       const item = media[p.index - 1];
       if (!item) return null;
       return { show: item.show, title: item.title, url: item.url, type: item.type, reason: p.reason };

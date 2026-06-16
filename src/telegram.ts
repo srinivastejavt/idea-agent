@@ -82,8 +82,9 @@ export async function sendTweetAngles(tweetIdeas: IdeaResult["tweetIdeas"]): Pro
   if (!tweetIdeas?.length) return;
   const text = formatTweetAngles(tweetIdeas);
   if (!text) return;
-  await sendMessage(text);
-  console.log(`[telegram] Tweet angles sent: ${tweetIdeas.length} trends`);
+  const chunks = chunkText(text);
+  for (const chunk of chunks) await sendMessage(chunk);
+  console.log(`[telegram] Tweet angles sent: ${tweetIdeas.length} trends (${chunks.length} chunk(s))`);
 }
 
 // ─── Format trending X section ───────────────────────────────────────────────
