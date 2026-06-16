@@ -254,15 +254,7 @@ function recategorize(ideas: Idea[], trends: TrendSignal[]): Idea[] {
 // Not full drafts — just 3 distinct angles/hooks per trend that the user can
 // take to Claude chat and turn into their own tweet in their own voice.
 
-async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
-  const response = await client.chat.completions.create({
-    model: "deepseek/deepseek-v4-flash", // cheap + fast, no need for heavy reasoning
-    max_tokens: 2000,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: `You help a solo tech founder find non-obvious angles on tech/crypto/startup/security news to tweet about.
+const TWEET_ANGLE_SYSTEM = `You help a solo tech founder find non-obvious angles on tech/crypto/startup/security news to tweet about.
 
 For each trend, give 6 angles with DISTINCT lenses:
 1. INCENTIVE lens — who specifically benefits, who's being misled, what's the real motive ("The quiet reason [Company] is doing [X] is [Y]")
@@ -278,36 +270,76 @@ Rules:
 - Hook should make someone stop scrolling
 - NOT a draft tweet — just the angle/hook to develop
 
-Respond ONLY with valid JSON. No markdown.`,
-      },
-      {
-        role: "user",
-        content: `Today's trends:
+Respond ONLY with valid JSON. No markdown.`;
+
+function tweetAnglesUserPrompt(trends: TrendSignal[]): string {
+  return `Today's trends:
 ${trends.map((t, i) => `${i + 1}. [${(t.category ?? "other").toUpperCase()}] ${t.trend}`).join("\n")}
 
-For each trend, give 3 distinct tweet angles. Return JSON:
+For each trend, give 6 distinct tweet angles (one per lens). Return JSON:
 {
   "tweetIdeas": [
-    {"trend": "one-line summary of trend 1", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]},
-    {"trend": "one-line summary of trend 2", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]},
-    {"trend": "one-line summary of trend 3", "angles": ["incentive", "contrarian", "builder", "story", "prediction", "hot take"]}
+    {"trend": "one-line summary of trend 1", "angles": ["incentive angle", "contrarian angle", "builder angle", "story angle", "prediction angle", "hot take angle"]},
+    {"trend": "one-line summary of trend 2", "angles": ["..."]},
+    {"trend": "one-line summary of trend 3", "angles": ["..."]}
   ]
-}`,
-      },
-    ],
-  });
+}`;
+}
 
-  const text = stripFences(response.choices[0].message.content ?? "{}");
-  const parsed = JSON.parse(text);
-  // Tolerate whatever top-level key the model uses
-  const ideas = (
+function parseTweetAngles(raw: string): TweetIdea[] {
+  const parsed = JSON.parse(stripFences(raw));
+  return (
     parsed.tweetIdeas ?? parsed.tweet_ideas ?? parsed.ideas ?? parsed.trends ??
     (Array.isArray(parsed) ? parsed : Object.values(parsed).find(Array.isArray))
     ?? []
   ) as TweetIdea[];
+}
 
-  // Attach source URLs from the corresponding trend (Twitter posts → direct link to the viral tweet)
-  return ideas.map((idea, i) => ({
+async function generateTweetIdeas(trends: TrendSignal[]): Promise<TweetIdea[]> {
+  const messages: { role: "system" | "user"; content: string }[] = [
+    { role: "system", content: TWEET_ANGLE_SYSTEM },
+    { role: "user",   content: tweetAnglesUserPrompt(trends) },
+  ];
+
+  // Run both models in parallel — same pattern as idea generation
+  const [geminiRes, deepseekRes] = await Promise.allSettled([
+    client.chat.completions.create({
+      model: "google/gemini-2.5-flash",
+      max_tokens: 2000,
+      response_format: { type: "json_object" },
+      messages,
+    }),
+    client.chat.completions.create({
+      model: "deepseek/deepseek-v4-flash",
+      max_tokens: 2000,
+      response_format: { type: "json_object" },
+      messages,
+    }),
+  ]);
+
+  const geminiIdeas   = geminiRes.status   === "fulfilled" ? parseTweetAngles(geminiRes.value.choices[0].message.content   ?? "{}") : [];
+  const deepseekIdeas = deepseekRes.status === "fulfilled" ? parseTweetAngles(deepseekRes.value.choices[0].message.content ?? "{}") : [];
+
+  console.log(`[prompt] Tweet angles — Gemini: ${geminiIdeas.length} trends, DeepSeek: ${deepseekIdeas.length} trends`);
+
+  // Merge by position: both models receive the same ordered trends list,
+  // so index i from each model corresponds to the same trend.
+  // Use Gemini's trend label; combine angles from both, deduplicate.
+  const count = Math.max(geminiIdeas.length, deepseekIdeas.length);
+  const merged: TweetIdea[] = [];
+  for (let i = 0; i < count; i++) {
+    const g = geminiIdeas[i];
+    const d = deepseekIdeas[i];
+    const base = g ?? d;
+    const combinedAngles = [
+      ...(g?.angles ?? []),
+      ...(d?.angles ?? []).filter(a => !(g?.angles ?? []).some(ga => ga.toLowerCase() === a.toLowerCase())),
+    ];
+    merged.push({ ...base, angles: combinedAngles });
+  }
+
+  // Attach source URLs from the corresponding trend
+  return merged.map((idea, i) => ({
     ...idea,
     sourceUrl: trends[i]?.sourceUrl,
   }));
