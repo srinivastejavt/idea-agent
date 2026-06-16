@@ -1010,55 +1010,95 @@ function parseTrendingTweets(items: Record<string, unknown>[]): TrendingPost[] {
   return posts;
 }
 
+// ─── Nitter — parse HTML search results into top TrendingPost ────────────────
+
+function parseNitterTop(html: string): TrendingPost | undefined {
+  const posts: TrendingPost[] = [];
+
+  for (const seg of html.split('<div class="timeline-item').slice(1)) {
+    // Skip retweets — their engagement stats belong to the original author
+    if (/retweet-header|Retweeted by/.test(seg)) continue;
+
+    const link = /href="\/([^/"#]+)\/status\/(\d+)/.exec(seg);
+    if (!link) continue;
+    const [, author, tweetId] = link;
+
+    const textMatch = /class="tweet-content[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(seg);
+    const text = textMatch?.[1]
+      ?.replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .trim() ?? "";
+    if (!text || text.length < 20) continue;
+
+    // Nitter renders stats in order: replies → retweets → likes
+    const nums = [...seg.matchAll(/tweet-stat[\s\S]*?>([\d,]+)<\/span>/g)]
+      .map(m => parseInt(m[1].replace(/,/g, ""), 10));
+    const [replies = 0, retweets = 0, likes = 0] = nums;
+
+    posts.push({
+      title:     text.slice(0, 280).replace(/\n+/g, " "),
+      url:       `https://x.com/${author}/status/${tweetId}`,
+      points:    likes + retweets * 2,
+      comments:  replies,
+      source:    "twitter" as const,
+      createdAt: new Date().toISOString(),
+      author,
+      likes,
+    });
+  }
+
+  return posts.sort((a, b) => b.points - a.points)[0];
+}
+
 async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCategory"]> {
-  // Disabled — "What's Hot on X" section paused (proxy reliability + cost)
-  return {};
+  // Nitter — public Twitter frontend, no auth or API key needed
+  const INSTANCES = [
+    "https://nitter.poast.org",
+    "https://nitter.privacydev.net",
+    "https://nitter.1d4.us",
+    "https://nitter.woodland.cafe",
+    "https://nitter.cz",
+  ];
 
-  const token = process.env.APIFY_API_TOKEN;
-  if (!token) return {};
+  // Find first working instance (sequential so we can break early)
+  let base: string | null = null;
+  for (const inst of INSTANCES) {
+    const res = await safeFetch(`${inst}/search?q=AI&f=tweets`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+    });
+    if (res) {
+      const html = await safeText(res);
+      if (html.includes("timeline-item")) {
+        base = inst;
+        console.log(`[scraper] Nitter: ${inst} ✓`);
+        break;
+      }
+    }
+    console.log(`[scraper] Nitter: ${inst} ✗`);
+  }
 
-  try {
-    // Step 1: Get X's actual trending topics right now
-    const trendsRaw = await apifyRun("data-slayer~twitter-trends-by-location", { country: "UnitedStates" });
-    const trendNames = trendsRaw.map(t => (t.name ?? "") as string).filter(Boolean);
-    console.log(`[scraper] X trending now: ${trendNames.slice(0, 8).join(", ")}`);
-
-    // Step 2: Match any trending topic to our categories
-    const aiTrend       = trendNames.find(t => AI_KW_SCRAPER.test(t));
-    const cryptoTrend   = trendNames.find(t => CRYPTO_KW_SCRAPER.test(t));
-    const securityTrend = trendNames.find(t => SECURITY_KW_SCRAPER.test(t));
-
-    // Step 3: Build queries — use real trend if matched, else fall back to keywords
-    const aiQuery       = aiTrend       ?? "AI LLM OpenAI Claude Anthropic model agents";
-    const cryptoQuery   = cryptoTrend   ?? "bitcoin ethereum crypto DeFi blockchain web3";
-    const securityQuery = securityTrend ?? "cybersecurity breach hack vulnerability CVE infosec";
-
-    console.log(`[scraper] Twitter trending queries — AI: "${aiQuery}", crypto: "${cryptoQuery}", security: "${securityQuery}"`);
-
-    // Step 4: Fetch latest tweets for each query in parallel
-    const [aiResult, cryptoResult, securityResult] = await Promise.allSettled([
-      apifyRun("data-slayer~twitter-search", { query: aiQuery,       section: "latest", maxPages: 2 }),
-      apifyRun("data-slayer~twitter-search", { query: cryptoQuery,   section: "latest", maxPages: 2 }),
-      apifyRun("data-slayer~twitter-search", { query: securityQuery, section: "latest", maxPages: 2 }),
-    ]);
-
-    const aiPosts       = aiResult.status === "fulfilled"       ? parseTrendingTweets(aiResult.value)       : [];
-    const cryptoPosts   = cryptoResult.status === "fulfilled"   ? parseTrendingTweets(cryptoResult.value)   : [];
-    const securityPosts = securityResult.status === "fulfilled" ? parseTrendingTweets(securityResult.value) : [];
-
-    console.log(`[scraper] Twitter trending: ${aiPosts.length} AI, ${cryptoPosts.length} crypto, ${securityPosts.length} security posts (last 6h)`);
-
-    const top = (arr: TrendingPost[]) => arr.sort((a, b) => b.points - a.points)[0];
-
-    return {
-      ai:       top(aiPosts),
-      crypto:   top(cryptoPosts),
-      security: top(securityPosts),
-    };
-  } catch (err) {
-    console.error("[scraper] Twitter trending error:", err);
+  if (!base) {
+    console.log("[scraper] Nitter: all instances down — trending skipped");
     return {};
   }
+
+  const search = async (q: string): Promise<TrendingPost | undefined> => {
+    const res = await safeFetch(`${base}/search?q=${encodeURIComponent(q)}&f=tweets`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; idea-agent/1.0)" },
+    });
+    if (!res) return undefined;
+    return parseNitterTop(await safeText(res));
+  };
+
+  const [ai, crypto, security] = await Promise.all([
+    search("AI LLM OpenAI Claude Anthropic agents model"),
+    search("bitcoin ethereum crypto DeFi blockchain web3"),
+    search("cybersecurity breach hack vulnerability CVE infosec"),
+  ]);
+
+  const found = [ai && "ai", crypto && "crypto", security && "security"].filter(Boolean);
+  console.log(`[scraper] Nitter trending: ${found.join(", ") || "none"}`);
+  return { ai, crypto, security };
 }
 
 // ─── Deduplication ───────────────────────────────────────────────────────────
