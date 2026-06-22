@@ -15,26 +15,37 @@ export interface MediaItem {
 // ─── Feed sources ─────────────────────────────────────────────────────────────
 
 const FEEDS: { name: string; url: string; type: "podcast" | "youtube" }[] = [
-  // ── AI Podcasts ───────────────────────────────────────────────────────────
-  { name: "Lex Fridman",      url: "https://lexfridman.com/feed/podcast/",                                          type: "podcast" },
-  { name: "No Priors",        url: "https://feeds.simplecast.com/no-priors",                                        type: "podcast" },
-  { name: "Latent Space",     url: "https://feeds.transistor.fm/latent-space-the-ai-engineer-podcast",              type: "podcast" },
-  { name: "Lenny's Podcast",  url: "https://feeds.transistor.fm/lenny-s-podcast",                                   type: "podcast" },
-  // ── Crypto Podcasts ───────────────────────────────────────────────────────
-  { name: "Bankless",         url: "https://feeds.megaphone.fm/bankless",                                           type: "podcast" },
-  { name: "Unchained",        url: "https://unchained.libsyn.com/rss",                                              type: "podcast" },
-  { name: "The Pomp Podcast", url: "https://feeds.simplecast.com/V5yrCBwn",                                         type: "podcast" },
-  // ── Startup Podcasts ──────────────────────────────────────────────────────
-  { name: "All-In",           url: "https://feeds.megaphone.fm/all-in",                                             type: "podcast" },
-  { name: "My First Million", url: "https://mfmpod.libsyn.com/rss",                                                 type: "podcast" },
-  { name: "Acquired",         url: "https://feeds.simplecast.com/4T39_jAj",                                         type: "podcast" },
-  { name: "20VC",             url: "https://thetwentyminutevc.libsyn.com/rss",                                      type: "podcast" },
+  // ── Venture / Tech Podcasts ───────────────────────────────────────────────
+  { name: "20VC",                       url: "https://thetwentyminutevc.libsyn.com/rss",                                          type: "podcast" },
+  { name: "Acquired",                   url: "https://feeds.simplecast.com/4T39_jAj",                                             type: "podcast" },
+  { name: "Lenny's Podcast",            url: "https://api.substack.com/feed/podcast/10845.rss",                                   type: "podcast" },
+  { name: "BG2 Pod",                    url: "https://anchor.fm/s/f06c2370/podcast/rss",                                          type: "podcast" },
+  { name: "All-In",                     url: "https://allinchamathjason.libsyn.com/rss",                                          type: "podcast" },
+  { name: "Invest Like the Best",       url: "https://feeds.megaphone.fm/investlikethebest",                                      type: "podcast" },
+  { name: "The Logan Bartlett Show",    url: "https://rss2.flightcast.com/jlx9l0yn04wt3r710o051jtm.xml",                         type: "podcast" },
+  // ── Crypto ───────────────────────────────────────────────────────────────
+  { name: "Bankless",                   url: "https://feeds.flightcast.com/p83fuj0y0u58o82l41xei7zo.xml",                         type: "podcast" },
+  // ── Science / Ideas ───────────────────────────────────────────────────────
+  { name: "Dwarkesh Podcast",           url: "https://apple.dwarkesh-podcast.workers.dev/feed.rss",                               type: "podcast" },
+  { name: "No Priors",                  url: "https://feeds.megaphone.fm/nopriors",                                               type: "podcast" },
+  { name: "Lex Fridman",                url: "https://lexfridman.com/feed/podcast/",                                              type: "podcast" },
+  { name: "Founders Podcast",           url: "https://feeds.megaphone.fm/DSLLC6297708582",                                        type: "podcast" },
+  { name: "My First Million",           url: "https://feeds.megaphone.fm/HS2300184645",                                           type: "podcast" },
+  { name: "The Tim Ferriss Show",       url: "https://rss.art19.com/tim-ferriss-show",                                            type: "podcast" },
+  { name: "Sean Carroll's Mindscape",   url: "https://rss.art19.com/sean-carrolls-mindscape",                                     type: "podcast" },
+  { name: "The Knowledge Project",      url: "https://feeds.megaphone.fm/FSMI7575968096",                                         type: "podcast" },
+  { name: "EconTalk",                   url: "https://feeds.simplecast.com/wgl4xEgL",                                             type: "podcast" },
+  { name: "80,000 Hours",               url: "https://feeds.transistor.fm/80000-hours-podcast",                                   type: "podcast" },
+  { name: "Conversations with Tyler",   url: "https://feeds.simplecast.com/gCZGYrx9",                                             type: "podcast" },
+  { name: "In Our Time",                url: "https://podcasts.files.bbci.co.uk/b006qykl.rss",                                    type: "podcast" },
   // ── YouTube (channel RSS — free, no API key needed) ───────────────────────
-  { name: "Y Combinator",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCcefcZRL2oaA_uBNeo5UNqg", type: "youtube" },
-  { name: "Fireship",         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA", type: "youtube" },
-  { name: "Andrej Karpathy",  url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXUPKJO5MZQN11PqgIvyuvQ", type: "youtube" },
-  { name: "Greg Isenberg",    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCPjNBjflYl0-HQtUvOx0Ibw", type: "youtube" },
-  { name: "a16z",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC9cn0TuPq4dnbTY-CBsm8XA", type: "youtube" },
+  { name: "Diary of a CEO",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCGq-a57w-aPwyi3pW7XLiHw",     type: "youtube" },
+  { name: "Colin and Samir",            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCmJPFjH0MIOO3H7NzK8bn8A",     type: "youtube" },
+  { name: "Huberman Lab",               url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC2D2CMWXMOVWx7giW1n3LIg",     type: "youtube" },
+  { name: "PowerfulJRE",                url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCzWQYUVCpZqtN93H8RR44Qw",     type: "youtube" },
+  { name: "Y Combinator",               url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCcefcZRL2oaA_uBNeo5UOWg",     type: "youtube" },
+  { name: "Talks at Google",            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCbmNph6atAoGfqLoCL_duAg",     type: "youtube" },
+  { name: "a16z",                       url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC9cn0TuPq4dnbTY-CBsm8XA",     type: "youtube" },
 ];
 
 // ─── RSS parser (handles both RSS 2.0 and Atom/YouTube format) ───────────────
@@ -60,14 +71,35 @@ function parseRSS(xml: string, show: string, type: "podcast" | "youtube"): Media
 
   for (const seg of segments.slice(0, 5)) { // max 5 per feed
     const title = extractTag(seg, "title");
-    const url   = isAtom
-      ? extractAttr(seg, "link", "href")
-      : extractTag(seg, "link") || extractTag(seg, "guid");
+
+    const http = (s: string) => (s.startsWith("http://") || s.startsWith("https://")) ? s : "";
+
+    let url: string;
+    if (isAtom) {
+      // YouTube Atom: <link rel="alternate" href="..."/> or <yt:videoId>ID</yt:videoId>
+      url = http(extractAttr(seg, "link", "href"));
+      if (!url) {
+        const videoId = extractTag(seg, "yt:videoId");
+        if (videoId) url = `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    } else {
+      // RSS: try each candidate in order, skip anything that isn't an http/https URL
+      // (<guid> often contains internal IDs like gid://art19-episode-... — must reject those)
+      url = http(extractTag(seg, "link"))
+         || http(extractAttr(seg, "link", "href"))
+         || http(extractTag(seg, "guid"))
+         || http(extractAttr(seg, "enclosure", "url"));
+    }
+
     const date  = isAtom
       ? extractTag(seg, "published") || extractTag(seg, "updated")
       : extractTag(seg, "pubDate");
 
-    if (!title || !url) continue;
+    if (!title || !url) {
+      if (title) console.warn(`[media] ${show}: item "${title.slice(0, 60)}" has no URL — skipping`);
+      continue;
+    }
+    console.log(`[media] ${show}: "${title.slice(0, 50)}" → ${url.slice(0, 80)}`);
     items.push({ title, url, show, type, publishedAt: date });
   }
 
@@ -98,11 +130,13 @@ export async function fetchRecentMedia(): Promise<MediaItem[]> {
 
   const all = results.flatMap(r => r.status === "fulfilled" ? r.value : []);
 
-  // Filter to last 7 days
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  // YouTube: last 3 days (channels post frequently, avoid stale picks)
+  // Podcasts: last 7 days (weekly release cadence)
   const recent = all.filter(item => {
     const d = new Date(item.publishedAt).getTime();
-    return !isNaN(d) ? d > cutoff : true; // keep if date unparseable
+    if (isNaN(d)) return true; // keep if date unparseable
+    const cutoffDays = item.type === "youtube" ? 3 : 7;
+    return d > Date.now() - cutoffDays * 24 * 60 * 60 * 1000;
   });
 
   console.log(`[media] ${recent.length} items from last 7 days across ${FEEDS.length} feeds`);

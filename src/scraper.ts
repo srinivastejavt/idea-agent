@@ -900,8 +900,55 @@ async function apifyRun(actorId: string, input: Record<string, unknown>): Promis
 }
 
 async function scrapeTwitter(): Promise<TrendPost[]> {
-  // Disabled — Twitter/X scraping paused (proxy reliability + cost)
-  return [];
+  // Reads from twitter_feed_cache table populated by scripts/birdclaw-sync.sh
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) {
+    console.log("[scraper] Twitter/birdclaw: skipping — SUPABASE_URL not set");
+    return [];
+  }
+
+  try {
+    const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const res = await fetch(
+      `${url}/rest/v1/twitter_feed_cache?fetched_at=gte.${cutoff}&order=points.desc&limit=20`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+    if (!res.ok) throw new Error(`Supabase ${res.status}`);
+
+    const rows = await res.json() as {
+      tweet_id: string; author: string; text: string;
+      url: string; likes: number; points: number; replies: number;
+    }[];
+
+    if (!rows.length) {
+      console.log("[scraper] Twitter/birdclaw: cache empty — run birdclaw-sync.sh");
+      return [];
+    }
+
+    const posts: TrendPost[] = rows.map(r => ({
+      title:     r.text.slice(0, 280).replace(/\n+/g, " "),
+      url:       r.url,
+      points:    r.points,
+      comments:  r.replies,
+      source:    "twitter" as const,
+      createdAt: new Date().toISOString(),
+      author:    r.author,
+      likes:     r.likes,
+    }));
+
+    console.log(`[scraper] Twitter/birdclaw: ${posts.length} posts from cache`);
+    return posts;
+  } catch (err) {
+    console.warn(`[scraper] Twitter/birdclaw: ${(err as Error).message}`);
+    return [];
+  }
 
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
@@ -1052,12 +1099,16 @@ function parseNitterTop(html: string): TrendingPost | undefined {
 
 async function scrapeTwitterTrending(): Promise<FetchTrendsResult["trendingByCategory"]> {
   // Nitter — public Twitter frontend, no auth or API key needed
+  // Ordered by reliability (source: status.d420.de, checked 2026-06-22)
   const INSTANCES = [
-    "https://nitter.poast.org",
-    "https://nitter.privacydev.net",
-    "https://nitter.1d4.us",
-    "https://nitter.woodland.cafe",
-    "https://nitter.cz",
+    "https://xcancel.com",               // 97% uptime
+    "https://nitter.net",                // 95% uptime
+    "https://nuku.trabun.org",           // 95% uptime
+    "https://nitter.privacyredirect.com",// 91% uptime
+    "https://nitter.kareem.one",         // 90% uptime
+    "https://nitter.catsarch.com",       // 70% uptime
+    "https://nitter.tiekoetter.com",     // 46% uptime
+    "https://nt.vern.cc",               // 37% uptime
   ];
 
   // Find first working instance (sequential so we can break early)
@@ -1232,7 +1283,7 @@ export async function fetchTrends(includeTrending = false): Promise<FetchTrendsR
       scrapeWuBlockchain(),
       scrapeCoinGeckoNews(),
       scrapeRwaXyz(),
-      includeTrending ? scrapeTwitterTrending() : Promise.resolve({}),
+      scrapeTwitterTrending(),
     ]);
 
   const raw: TrendPost[] = [
